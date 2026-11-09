@@ -2,6 +2,22 @@
 
 Spoon の公式APIでコメントを受信し、読み上げ、集計、質問受付、投票、ゲーム、自動応答を行うWindowsアプリです。C++20 / Win32 / WebView2を使用します。
 
+## ダウンロードと起動
+
+[GitHub Releases](https://github.com/sasamina3337/spoon-manager/releases) から Windows x64 向けの配布物を取得してください。
+
+| 配布物 | 使い方 |
+| --- | --- |
+| `SpoonManager-2.8.0-win64-Setup.exe` | 1ファイルのインストーラー。実行してインストールします。 |
+| `SpoonManager-2.8.0-win64.zip` | 全体を展開し、フォルダー内の `SpoonManager.exe` を起動します。 |
+| `SHA256SUMS.txt` | ダウンロードしたインストーラーと ZIP の SHA-256 一覧です。 |
+
+どちらも [Microsoft Edge WebView2 Evergreen Runtime（x64）](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) が必要です。インストーラーは未導入なら案内して終了し、ランタイムの自動インストールは行いません。
+
+アプリ本体は画面ファイル、DLL、Cloudflare の補助 EXE と一緒に動作します。`SpoonManager.exe` だけを取り出して実行する形式にはしていません。ZIP はフォルダー構成と `licenses/` を保持してください。配布物には認証情報、設定、利用記録、開発用依存、Debug DLL を含めません。
+
+Spoon の開発者登録・API 認証設定は各利用者が用意してください。音声サービスや外部 API の利用条件は [サードパーティーと外部サービス](THIRD_PARTY_NOTICES.md) を参照してください。
+
 ## 開発環境
 
 Windows x64、Microsoft C++ Build Tools（C++ によるデスクトップ開発）、Windows SDK、CMake 4.2 以降、Visual Studio 2026 が必要です。Visual Studio に付属するツールも利用できます。起動には Microsoft Edge WebView2 Evergreen Runtime が必要です。
@@ -40,6 +56,8 @@ npm run test:ui
 ~~~
 
 アプリのビルド・起動にはNode.jsは不要です。一時参加URLの公開に使うCloudflareの実行ファイルは、固定バージョンとSHA-256を検証して同梱します。
+
+Release 構成では、インストーラーに使用した同じ配布用ファイルから `dist/releases/SpoonManager-2.8.0-win64.zip` も作成します。第三者のライセンスと NOTICE も両方に同梱します。
 
 ## 機能と保存データ
 

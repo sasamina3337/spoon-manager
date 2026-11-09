@@ -154,8 +154,11 @@ install(DIRECTORY desktop/renderer/ DESTINATION ui)
 install(FILES README.md FEATURES.md COMMANDS.md THIRD_PARTY_NOTICES.md DESTINATION documentation)
 install(FILES native/README.md DESTINATION documentation RENAME Development.md)
 install(FILES "${webview2_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME WebView2.txt)
+install(FILES "${webview2_SOURCE_DIR}/NOTICE.txt" DESTINATION licenses RENAME WebView2-NOTICE.txt)
 install(FILES "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses RENAME nlohmann-json.txt)
 install(FILES "${httplib_SOURCE_DIR}/LICENSE" DESTINATION licenses RENAME cpp-httplib.txt)
+file(GLOB spoon_redistribution_notices CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/licenses/*.txt" "${PROJECT_SOURCE_DIR}/licenses/*.json")
+install(FILES ${spoon_redistribution_notices} DESTINATION licenses)
 set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_INSTALL_DEBUG_LIBRARIES TRUE)
@@ -197,10 +200,25 @@ add_custom_command(OUTPUT "${SPOON_INSTALLER_FILE}"
         "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
         "${PROJECT_SOURCE_DIR}/COMMANDS.md" "${PROJECT_SOURCE_DIR}/native/README.md"
         "${webview2_SOURCE_DIR}/LICENSE.txt" "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT"
-        "${httplib_SOURCE_DIR}/LICENSE"
+        "${webview2_SOURCE_DIR}/NOTICE.txt" "${httplib_SOURCE_DIR}/LICENSE"
+        ${spoon_redistribution_notices}
     COMMENT "Building per-user NSIS installer (does not install the application)"
     VERBATIM)
 add_custom_target(spoon-installer ALL DEPENDS "${SPOON_INSTALLER_FILE}")
+
+# Build both release formats from the same clean, allowlisted install payload.
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(SPOON_PORTABLE_NAME "SpoonManager-${PROJECT_VERSION}-win64")
+    set(SPOON_PORTABLE_FILE "${PROJECT_SOURCE_DIR}/dist/releases/${SPOON_PORTABLE_NAME}.zip")
+    configure_file(cmake/BuildPortable.cmake.in "${CMAKE_BINARY_DIR}/BuildPortable.cmake" @ONLY)
+    add_custom_command(OUTPUT "${SPOON_PORTABLE_FILE}"
+        COMMAND "${CMAKE_COMMAND}" -P "${CMAKE_BINARY_DIR}/BuildPortable.cmake"
+        DEPENDS "${SPOON_INSTALLER_FILE}" "${CMAKE_BINARY_DIR}/BuildPortable.cmake"
+        COMMENT "Packaging Release portable ZIP from the verified installer payload"
+        VERBATIM)
+    add_custom_target(spoon-release ALL DEPENDS "${SPOON_PORTABLE_FILE}")
+    add_dependencies(spoon-release spoon-installer)
+endif()
 
 if(BUILD_TESTING)
     add_test(NAME native-installer COMMAND powershell -NoProfile -ExecutionPolicy Bypass
@@ -208,6 +226,12 @@ if(BUILD_TESTING)
         -Installer "${SPOON_INSTALLER_FILE}"
         -Root "${CMAKE_BINARY_DIR}/test-data/installer")
     set_tests_properties(native-installer PROPERTIES TIMEOUT 150 RUN_SERIAL TRUE)
+    # Exercise public Release artifacts even when the IDE currently selects Debug.
+    add_test(NAME native-release-package COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+        -File "${PROJECT_SOURCE_DIR}/scripts/test-release.ps1"
+        -ProjectRoot "${PROJECT_SOURCE_DIR}"
+        -Root "${CMAKE_BINARY_DIR}/test-data/release-package")
+    set_tests_properties(native-release-package PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 endif()
 
 set(CPACK_GENERATOR ZIP)

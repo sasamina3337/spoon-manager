@@ -1,0 +1,39 @@
+set(payload "@CMAKE_BINARY_DIR@/installer-stage")
+set(package_root "@CMAKE_BINARY_DIR@/portable-stage")
+set(package "${package_root}/@SPOON_PORTABLE_NAME@")
+if(NOT "@CMAKE_BUILD_TYPE@" STREQUAL "Release")
+    message(FATAL_ERROR "Public packages require Release configuration.")
+endif()
+if(IS_SYMLINK "${package_root}" OR IS_SYMLINK "${payload}")
+    message(FATAL_ERROR "Refusing linked release staging directories.")
+endif()
+foreach(required IN ITEMS SpoonManager.exe cloudflared.exe LICENSE
+        ui/popup/popup.html licenses/WebView2.txt licenses/WebView2-NOTICE.txt
+        licenses/nlohmann-json.txt licenses/nlohmann-json-components.txt
+        licenses/cpp-httplib.txt licenses/cloudflared.txt
+        licenses/cloudflared-dependencies.txt licenses/cloudflared-dependencies.json
+        licenses/go-runtime.txt licenses/nsis.txt licenses/microsoft-runtime.txt)
+    if(NOT EXISTS "${payload}/${required}")
+        message(FATAL_ERROR "Missing release file: ${required}")
+    endif()
+endforeach()
+file(GLOB_RECURSE files RELATIVE "${payload}" LIST_DIRECTORIES false "${payload}/*")
+foreach(relative IN LISTS files)
+    if(IS_SYMLINK "${payload}/${relative}" OR relative MATCHES "(^|/)(\\.env[^/]*|connection\\.json|state\\.json|tokens\\.json|node_modules|test-data)(/|$)"
+            OR relative MATCHES "\\.(pdb|obj|lib|log|pem|key|pfx|p12|dmp)$"
+            OR relative MATCHES "(^|/)(msvcp|vcruntime|concrt)[0-9_]+d[^/]*\\.dll$")
+        message(FATAL_ERROR "Private, Debug or development file in release payload: ${relative}")
+    endif()
+endforeach()
+# This fixed build-owned directory contains packaging output only.
+file(REMOVE_RECURSE "${package_root}")
+file(MAKE_DIRECTORY "${package}")
+file(COPY "${payload}/" DESTINATION "${package}")
+file(MAKE_DIRECTORY "@PROJECT_SOURCE_DIR@/dist/releases")
+execute_process(COMMAND "@CMAKE_COMMAND@" -E tar cf "@SPOON_PORTABLE_FILE@"
+    --format=zip -- "@SPOON_PORTABLE_NAME@"
+    WORKING_DIRECTORY "${package_root}" RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Portable ZIP creation failed.")
+endif()
+message(STATUS "Portable ZIP: @SPOON_PORTABLE_FILE@")

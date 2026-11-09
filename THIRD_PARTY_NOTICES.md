@@ -16,7 +16,18 @@ Spoon Manager 本体の独自コードは [MIT License](LICENSE) で公開しま
 
 依存部品、ダウンロードした SDK、ビルド済み実行ファイル、ランタイム DLL はソースリポジトリに含めません。ビルドでは固定 URL と SHA-256 で主要な取得物を検証します。jsdom の間接依存は [package-lock.json](package-lock.json) で固定します。
 
-バイナリを配布する場合は、本体の LICENSE と第三者のライセンス・著作権表示を保持してください。現在の CMake のインストール処理は nlohmann/json、cpp-httplib、WebView2、cloudflared のライセンスを licenses/ に配置します。バイナリ公開時には、cloudflared の間接依存や上流の NOTICE、および使用した NSIS・Microsoft ランタイムの再配布条件も確認してください。
+インストーラーと ZIP は、本体の LICENSE と第三者のライセンス・著作権表示を同梱します。CMake は nlohmann/json、cpp-httplib、WebView2 SDK のライセンスと NOTICE、cloudflared の Apache-2.0 ライセンス、および [licenses/](licenses/) 内の文書を配置します。
+
+## v2.8.0 のバイナリ配布で確認した条件
+
+- **nlohmann/json と cpp-httplib**: MIT の著作権表示・許諾文・免責文を保持します。nlohmann/json に同梱される Hedley などの著作権表示も `nlohmann-json-components.txt` に収録します。
+- **WebView2 SDK**: 取得した SDK の LICENSE.txt と NOTICE.txt をそのまま同梱します。ブラウザー本体は配布せず、[Microsoft の配布ガイド](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution) に従って Evergreen Runtime を事前条件にしています。
+- **cloudflared**: 公式配布の Windows amd64 バイナリを改変せず、固定 SHA-256 を照合して使用します。ビルド情報に記録された実際の 66 モジュール（置換先を含む）について、Go 公式モジュールプロキシのソース ZIP を取得し、バイナリに記録された Go モジュールの h1 チェックサムを照合しました。各モジュール内の LICENSE・COPYING・NOTICE・著作権表示・PATENTS 等を `cloudflared-dependencies.txt` に保持し、取得 URL・バージョン・チェックサム・収録ファイルを `cloudflared-dependencies.json` に記録しています。cloudflared 自体の上流タグには独立した NOTICE ファイルはありません。
+- **Go ランタイム**: cloudflared が使用した Go 1.27.3 の公式ソースにあるライセンス・特許許諾・第三者表示を `go-runtime.txt` に保持します。ビルドツールや未使用のソース部品の表示も含むため、表示範囲は実際にリンクされた部分より広くなっています。
+- **NSIS 3.11**: 取得した配布物の COPYING 全文を `nsis.txt` に保持します。LZMA 圧縮モジュールの CPL-1.0 には、リンクするアプリのコードを CPL の対象にしない特別例外が付属しています。NSIS 自体や圧縮モジュールの改変は行っていません。[上流のソース・ライセンス](https://nsis.sourceforge.io/License) も参照してください。
+- **Microsoft Visual C++ Runtime**: 正規にライセンスされた Visual Studio の利用を前提に、[Visual Studio 2026 の再配布可能リスト](https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution) に記載された VC/Redist 配下の Release DLL のみを、無改変でアプリと同梱します。Debug DLL や開発ツールは配布しません。Microsoft のソフトウェアに本体の MIT を適用するものではありません。
+
+jsdom・Node.js・CMake・コンパイラーはバイナリ配布物に含めません。依存を更新した場合は、この確認とライセンス文書の収集を更新してください。
 
 Microsoft Edge WebView2 Evergreen Runtime は利用者が別途導入します。
 

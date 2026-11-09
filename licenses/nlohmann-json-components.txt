@@ -1,0 +1,11 @@
+nlohmann/json 3.11.3 and bundled MIT-licensed components
+Source: https://github.com/nlohmann/json/tree/v3.11.3
+
+2008-2009 Björn Hoehrmann <bjoern@hoehrmann.de>
+2009 Florian Loitsch <https://florian.loitsch.com/>
+2013-2023 Niels Lohmann <https://nlohmann.me>
+2016-2021 Evan Nemerson <evan@nemerson.com>
+2018 The Abseil Authors
+
+All of the listed component headers carry SPDX-License-Identifier: MIT.
+See nlohmann-json.txt for the complete MIT permission and warranty terms.

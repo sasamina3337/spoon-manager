@@ -1,0 +1,18 @@
+Microsoft Visual C++ Runtime redistribution
+
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+The Microsoft runtime DLLs accompanying this application are unmodified Release
+runtime files from the licensed Visual Studio 2026 installation's VC/Redist
+directory. They remain subject to Microsoft's terms, not Spoon Manager's MIT
+license. No Debug runtime, compiler, SDK, or Visual Studio tool is distributed.
+
+Official distributable-code list and applicable license-terms reference:
+https://learn.microsoft.com/en-us/visualstudio/releases/2026/redistribution
+
+Visual Studio 2026 Community license terms:
+https://visualstudio.microsoft.com/license-terms/vs2026-ga-community/
+
+Microsoft Edge WebView2 Evergreen Runtime is a separate prerequisite and is not
+included in this package. Obtain it from Microsoft's official download page:
+https://developer.microsoft.com/en-us/microsoft-edge/webview2/
