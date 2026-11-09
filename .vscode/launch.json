@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Spoon Manager (Debug)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/.local/build/windows-debug/bin/SpoonManager.exe",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Debug ビルド",
+      "args": [],
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    }
+  ]
+}

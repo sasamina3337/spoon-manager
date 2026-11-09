@@ -1,0 +1,51 @@
+# Generated from the source template. Stage only allowlisted install() payload.
+set(stage "@CMAKE_BINARY_DIR@/installer-stage")
+# This directory is generated exclusively for packaging. Recreate it so files
+# from an older dependency or renderer cannot leak into the current installer.
+if(IS_SYMLINK "${stage}")
+    message(FATAL_ERROR "Refusing to replace a linked installer staging directory.")
+endif()
+file(REMOVE_RECURSE "${stage}")
+execute_process(COMMAND "@CMAKE_COMMAND@" --install "@CMAKE_BINARY_DIR@" --config "@CMAKE_BUILD_TYPE@" --prefix "${stage}"
+    RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Unable to stage the NSIS payload.")
+endif()
+file(MAKE_DIRECTORY "@PROJECT_SOURCE_DIR@/dist/installers")
+
+# Delete exactly our packaged files, never the user's settings or unknown files.
+file(GLOB_RECURSE payload RELATIVE "${stage}" LIST_DIRECTORIES false "${stage}/*")
+set(uninstall "")
+set(directories "")
+foreach(relative IN LISTS payload)
+    if(relative MATCHES "[\"$\r\n]")
+        message(FATAL_ERROR "Unsupported character in installer payload path.")
+    endif()
+    string(REPLACE "/" "\\" windows_path "${relative}")
+    string(APPEND uninstall "Delete \"$INSTDIR\\${windows_path}\"\n")
+    get_filename_component(parent "${relative}" DIRECTORY)
+    while(NOT parent STREQUAL "")
+        list(APPEND directories "${parent}")
+        get_filename_component(parent "${parent}" DIRECTORY)
+    endwhile()
+endforeach()
+list(REMOVE_DUPLICATES directories)
+list(SORT directories ORDER DESCENDING)
+foreach(directory IN LISTS directories)
+    string(REPLACE "/" "\\" windows_path "${directory}")
+    string(APPEND uninstall "RMDir \"$INSTDIR\\${windows_path}\"\n")
+endforeach()
+file(WRITE "@CMAKE_BINARY_DIR@/installer-uninstall.nsh" "${uninstall}")
+file(TO_NATIVE_PATH "@CMAKE_BINARY_DIR@/installer-uninstall.nsh" uninstall_include)
+execute_process(COMMAND "@SPOON_MAKENSIS_EXECUTABLE@" /V2
+    "/DSTAGE_DIR=${stage}"
+    "/DOUTPUT_FILE=@SPOON_INSTALLER_FILE@"
+    "/DPRODUCT_VERSION=@PROJECT_VERSION@"
+    "/DUNINSTALL_PAYLOAD=${uninstall_include}"
+    "/DPRODUCT_ICON=@PROJECT_SOURCE_DIR@/desktop/renderer/icons/reader.ico"
+    "@PROJECT_SOURCE_DIR@/installer/spoon-manager.nsi"
+    RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+    message(FATAL_ERROR "NSIS installer generation failed.")
+endif()
+message(STATUS "NSIS installer: @SPOON_INSTALLER_FILE@")

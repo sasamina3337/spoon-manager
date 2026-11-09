@@ -1,0 +1,82 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Debug 構成",
+      "type": "cmake",
+      "command": "configure",
+      "preset": "windows-debug",
+      "problemMatcher": []
+    },
+    {
+      "label": "Debug ビルド",
+      "type": "cmake",
+      "command": "build",
+      "preset": "windows-debug",
+      "dependsOn": "Debug 構成",
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Release 構成",
+      "type": "cmake",
+      "command": "configure",
+      "preset": "windows-release",
+      "problemMatcher": []
+    },
+    {
+      "label": "Release ビルド",
+      "type": "cmake",
+      "command": "build",
+      "preset": "windows-release",
+      "dependsOn": "Release 構成",
+      "problemMatcher": [
+        "$msCompile"
+      ],
+      "group": "build"
+    },
+    {
+      "label": "テスト",
+      "type": "cmake",
+      "command": "test",
+      "preset": "windows-debug",
+      "dependsOn": "Debug ビルド",
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "画面ロジックのテスト",
+      "type": "process",
+      "command": "node",
+      "args": [
+        "--test"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "Stage Release",
+      "type": "cmake",
+      "command": "build",
+      "preset": "windows-release",
+      "targets": [
+        "install"
+      ],
+      "dependsOn": "Release 構成",
+      "problemMatcher": [
+        "$msCompile"
+      ]
+    }
+  ]
+}

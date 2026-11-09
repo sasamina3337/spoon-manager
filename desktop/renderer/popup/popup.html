@@ -1,0 +1,230 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spoon Manager</title><script src="../shared/theme.js"></script><link rel="icon" href="../icons/reader.ico" type="image/x-icon"><link rel="icon" href="../icons/reader.svg" type="image/svg+xml"><link rel="stylesheet" href="app.css"><script type="module" src="../native-entry.js"></script><link rel="stylesheet" href="simple.css"><link rel="stylesheet" href="../shared/workspace.css"><link rel="stylesheet" href="../shared/theme.css"></head>
+<body>
+  <header class="app-header"><a class="brand" href="#overview"><img class="brand-icon" src="../icons/reader.svg" alt="" width="35" height="35"><span><strong>Spoon Manager</strong></span></a><div class="header-connection"><span id="connection-dot" class="status-dot" aria-hidden="true"></span><span id="connection" role="status">API未接続</span></div><div class="header-actions" aria-label="配信の操作"><button id="connect" type="button" aria-pressed="false">受信開始</button><button id="v-stop" type="button" title="再生中と待機中の読み上げを停止">音声停止</button><button id="refresh" type="button">配信情報の更新</button></div></header>
+  <main>
+    <section class="connection-bar" aria-label="受信状況"><span id="receive-detail" class="hint"></span></section>
+    <p id="notice" role="status" hidden=""></p>
+    
+    <section id="setup-guide" class="setup-guide" hidden=""><h2>配信の取得を始めましょう</h2><p id="setup-text">DJの同意後に受信を開始できます。</p><button id="setup-settings" type="button">接続設定を開く</button></section>
+    <div class="workspace-bar"><nav class="tabs" aria-label="管理画面の切り替え"><a href="#overview" data-view="overview" aria-current="page">配信状況</a><a href="#records" data-view="records">参加者</a><a href="#tools" data-view="tools">配信ツール</a><a href="#analysis" data-view="analysis">記録・分析</a><a href="#settings" data-view="settings">設定</a><a href="#help" data-view="help">ヘルプ</a></nav>
+<div class="workspace-controls"><label class="theme-picker" for="theme-mode"><span>テーマ</span><select id="theme-mode"><option value="system">システム</option><option value="light">ライト</option><option value="dark">ダーク</option></select></label><label class="session-picker"><span>表示する配信</span><select id="session"><option value="">現在の配信</option></select></label></div></div>
+
+    
+<div id="view-overview" class="view" aria-labelledby="overview-heading">
+      <div class="page-title"><div><h1 id="overview-heading">配信状況</h1><p class="page-description">選択した配信の受信状況と目標を確認します。</p></div></div><section id="entry-reception" class="card" hidden=""><p id="entry-reception-status" role="status"></p><p class="hint"><a href="#help/troubleshooting">入室通知・マネージャー指定の確認手順</a></p></section>
+      <section class="card live-card"><h2 id="live-title">配信に接続してください</h2><p id="live-info" class="hint">接続設定を確認し、受信を開始してください。</p><p id="welcome"></p><div class="metrics"><div><span>コメント</span><strong id="comments">0</strong></div><div><span>入室</span><strong id="entries">0</strong></div><div><span>ハート</span><strong id="hearts">0</strong></div><div><span>スプーン</span><strong id="spoons">0</strong></div><div><span>新規フォロー</span><strong id="follows">0</strong></div><div><span>検出した人</span><strong id="people">0</strong></div></div><p id="count-scope" class="hint"></p><p id="quantity-unknown" class="hint" hidden=""></p></section>
+      <section class="card live-comments-card"><div class="section-title"><h2>コメント</h2><a href="#analysis/logs">すべての受信ログを見る →</a></div><ol id="live-comments" aria-live="polite" aria-relevant="additions"><li class="empty">受信開始後にコメントを表示します。</li></ol></section>
+      <div class="columns"><section class="card"><div class="section-title"><h2>目標の進捗</h2><a href="#settings/goals" data-settings-target="goals">目標値を変更 →</a></div><div class="progress-row"><span>ハート</span><strong id="heart-progress-text"></strong><progress id="heart-progress" max="100" value="0"></progress></div><div class="progress-row"><span>スプーン</span><strong id="spoon-progress-text"></strong><progress id="spoon-progress" max="100" value="0"></progress></div></section>
+<section class="card"><h2>前回との比較</h2><p id="comparison-label" class="hint">配信記録がたまると比較できます。</p><div id="comparison" class="comparison-list"></div><p class="hint">同じDJの直前の保存済み配信と比較します。受信時間の違いにも影響されます。</p></section>
+</div>
+
+      
+      
+    <div class="shortcut-grid" aria-label="よく使う操作"><a href="#tools"><strong>配信ツール</strong><span>質問受付・チャット・ゲーム</span></a><a href="#settings/voice" data-settings-target="voice"><strong>読み上げ設定</strong><span>接続先・声・読み上げ対象</span></a><a href="#analysis"><strong>記録・分析</strong><span>配信の推移・受信ログ・CSV</span></a><a href="#help"><strong>ヘルプ</strong><span>はじめ方・機能一覧・困ったとき</span></a></div></div>
+
+    
+<div id="view-records" class="view" aria-labelledby="records-heading" hidden="">
+      <div class="page-title"><div><h1 id="records-heading">参加者</h1><p class="page-description">参加者の貢献・個人記録・読み上げ音声を確認します。</p></div></div>
+      <div class="columns wide-left"><section class="card"><div class="section-title"><h2>参加者と貢献</h2><button id="export-users" type="button">参加者CSVを保存</button></div><div class="filters"><input id="user-search" type="search" placeholder="名前で検索" aria-label="参加者の名前を検索"><select id="user-sort" aria-label="参加者の並び順"><option value="comments">コメント順</option><option value="spoons">スプーン順</option><option value="hearts">ハート順</option><option value="entries">入室回数順</option></select></div><div class="table-wrap"><table><thead><tr><th>名前</th><th>コメント</th><th>入室</th><th>ハート</th><th>スプーン</th><th>サブスク</th></tr></thead><tbody id="users"></tbody></table></div><p class="hint">入室は通知を受信した回数です。検出した人の一覧には、退出した人も残ります。</p></section>
+<section class="card"><div class="section-title"><h2>公式ファンランキング</h2><button id="refresh-fans" type="button">取得する</button></div><ol id="fans"><li>取得するとここに表示します。</li></ol><p id="fans-info" class="hint">現在在室する人の上位30名です。利用には設定で機能を有効にしてください。権限の同意は受信開始時にまとめて取得します。</p></section>
+</div>
+<section id="attendance-slot"></section><section id="donations-slot"></section><details class="card participants-card" aria-labelledby="v-participants-heading">
+        <summary>参加者ごとの読み上げ音声</summary><div class="section-heading"><h2 id="v-participants-heading">参加者の声 <span id="v-participant-count" class="count-badge">0</span></h2><button id="v-refresh-room" type="button" class="text-button">更新</button></div>
+        <p id="v-room-hint" class="hint">ページから検出できた参加者を表示します。</p>
+        <div id="v-participants" class="participants"><p class="empty-state">参加者を確認しています…</p></div>
+        <div class="participant-footer"><p class="hint">候補の声より人数が多いと、同じ声を再利用します。</p><button id="v-reset-assignments" type="button" class="text-button">自動で割り当て直す</button></div>
+      </details>
+      <section id="profile-card" class="card"><div class="section-title"><h2>個人ステータス</h2><select id="profile-user" aria-label="ステータスを表示する参加者"><option value="">参加者を選択</option></select></div><p id="profile-hint" class="hint">一覧の名前を押すか、参加者を選択してください。チャットの /status では送信者自身の記録を確認できます。</p><div class="profile-metrics"><div><span>今回送ったスプーン</span><strong id="profile-spoons">—</strong></div><div><span>今回送ったハート</span><strong id="profile-hearts">—</strong></div><div><span>今回のコメント</span><strong id="profile-comments">—</strong></div><div><span>今回の入室</span><strong id="profile-entries">—</strong></div></div><p id="profile-total" class="profile-summary"></p><p id="profile-games" class="hint"></p><p id="profile-fortune" class="hint"></p><p class="hint">公式APIは同じDJの保存分、画面取得は選択した配信の読み取り分です。画面にIDがない場合は名前で照合するため、同名・改名により集計がずれることがあります。スプーンはギフトの数量、ハートは加算された個数です。購入額・残高・Spoon全体の生涯送信量は含みません。</p></section>
+      
+    </div>
+
+    
+<div id="view-tools" class="view" aria-labelledby="tools-heading" hidden="">
+      <div class="page-title"><div><h1 id="tools-heading">配信ツール</h1><p class="page-description">質問の受付、チャット送信、投票、ゲームを操作します。</p></div></div>
+
+
+      
+      
+
+      
+    <nav class="section-nav" aria-label="配信ツールの分類"><a href="#tools/requests" data-section-group="tools" data-section-link="requests">質問・参加URL</a><a href="#tools/chat" data-section-group="tools" data-section-link="chat">チャット・投票・抽選</a><a href="#tools/games" data-section-group="tools" data-section-link="games">ゲーム</a></nav>
+<div data-section-group="tools" data-section-panel="requests" hidden=""><div id="request-inbox-slot"></div><div id="participation-slot"></div></div><div data-section-group="tools" data-section-panel="chat" hidden=""><section class="card"><div class="section-title"><h2>自動コメント</h2><button id="pause-automation" type="button">一時停止</button></div><p id="automation-status" class="result" role="status"></p><p class="hint">入室・ハート・スプーン・定期お知らせをまとめて一時停止できます。読み上げはそのまま使えます。</p><a href="#settings/automation" data-settings-target="automation">文面・送信条件を設定</a></section>
+<section class="card"><div class="section-title"><h2>ボットからチャット</h2><a href="#settings/goals" data-settings-target="goals">定型文を編集 →</a></div><label for="template-select" class="field-label">保存した定型文</label><select id="template-select"><option value="">定型文を選択</option></select><textarea id="chat" rows="3" maxlength="200" placeholder="送信する本文（200文字まで）" aria-label="送信する本文"></textarea><div class="section-title"><span id="chat-count" class="hint">0 / 200</span><button id="send-chat" type="button" class="primary">この配信に送信</button></div><p class="hint">ボット名で投稿します。チャット送信の許可が必要です。ここから送った /help はコマンドとして実行されません。</p></section>
+<section class="card"><h2>チャット投票</h2><label class="field" for="poll-question"><span>質問（60文字まで）</span><input id="poll-question" maxlength="60" placeholder="次は何をする？"></label>
+<label class="field" for="poll-options"><span>選択肢（1行1個、2〜5個・各24文字まで）</span><textarea id="poll-options" rows="3" placeholder="雑談
+ゲーム"></textarea><p class="hint">長い質問・選択肢は、チャットへの投稿時だけ短く表示します。</p></label>
+<div class="button-group"><button id="start-poll" type="button">開始してチャットに案内</button><button id="end-poll" type="button">締切・結果を投稿</button></div><p id="poll-result" class="result" role="status"></p><p class="hint">リスナーは /vote 1 のように投票します。1人1票で変更できます。配信内の /poll と /poll end はDJ専用です。</p></section>
+<section class="card"><h2>リスナー抽選</h2><p class="hint">APIモードは現在のリスナー、画面取得モードは表示中の参加者（コメント欄を含む）から重複なしで抽選します。</p><div class="inline-field"><label for="draw-count">当選人数</label><input id="draw-count" type="number" value="1" min="1" max="20"><button id="draw" type="button">抽選する</button></div><p id="draw-result" class="result" role="status">抽選結果はここに表示します。</p><p id="listeners-info" class="hint">結果はこの画面に表示します。画面取得では現在DOMにある人だけが対象で、在室中の全員とは限りません。チャットへの /draw 応答は公式APIモードで利用できます。</p></section>
+</div><div data-section-group="tools" data-section-panel="games" hidden=""><div id="board-viewer-slot"></div><section class="card"><div class="section-title"><h2>配信でひと遊び</h2></div><p class="hint">Spoonの配信チャットにコマンドを送って参加します。スプーンやハートを送る必要はありません。</p><div class="game-guide"><article><h3>サイコロ</h3><code>/dice 2d6</code><p>サイコロを振って合計を表示。1〜5個、2〜100面まで指定できます。</p></article>
+<article><h3>今日のおみくじ</h3><code>/omikuji</code><p>運勢・色・数字。同じDJ・同じ人・同じ日は同じ結果です。</p></article>
+<article><h3>じゃんけん</h3><code>/janken グー</code><p>グー・チョキ・パーでボットと対戦。勝敗を記録します。</p></article>
+<article><h3>数当て</h3><code>/guess start</code><p>1〜20の秘密の数を5回で当てよう。/guess 10で回答、/guess endで終了。</p></article>
+</div><p class="hint">数当ては1人ずつ別の問題で、5分以内。成績は /game、詳しい遊び方は /help game で確認できます。</p></section>
+</div></div>
+
+    
+<div id="view-analysis" class="view" aria-labelledby="analysis-heading" hidden=""><div class="page-title"><div><h1 id="analysis-heading">記録・分析</h1><p class="page-description">保存済み配信の傾向を調べ、受信ログやCSVを確認します。</p></div></div><nav class="section-nav" aria-label="記録・分析の分類"><a href="#analysis/summary" data-section-group="analysis" data-section-link="summary">配信の分析</a><a href="#analysis/logs" data-section-group="analysis" data-section-link="logs">受信ログ</a></nav>
+<div data-section-group="analysis" data-section-panel="summary" hidden=""><section class="card analysis-card"><div class="section-title"><div><h2>保存済み配信の分析</h2></div><select id="analysis-limit" aria-label="分析する保存配信数"><option value="10">直近10配信</option><option value="5">直近5配信</option><option value="30">直近30配信</option><option value="100">直近100配信</option></select></div><p id="analysis-scope" class="hint"></p><div class="analysis-metrics"><div><span>スプーン合計</span><strong id="analysis-spoons">0</strong></div><div><span>ハート合計</span><strong id="analysis-hearts">0</strong></div><div><span>コメント合計</span><strong id="analysis-comments">0</strong></div><div><span>参加者（重複除外）</span><strong id="analysis-unique">0</strong></div></div><div class="section-title chart-heading"><h3>配信ごとの推移</h3><select id="trend-metric" aria-label="グラフの指標"><option value="spoons">スプーン</option><option value="hearts">ハート</option><option value="comments">コメント</option><option value="participants">参加者</option></select></div><div id="trend-chart" class="trend-chart" role="group" aria-label="保存済み配信の実績グラフ"></div><p class="hint">棒を選ぶとその配信を表示します。左が古い配信、右が新しい配信です。</p><div class="insight-grid"><div><span>この配信の再訪者</span><strong id="analysis-returning">—</strong><small id="returning-detail">以前の保存記録と照合します。</small></div><div><span>この配信のコメント / 分</span><strong id="analysis-rate">—</strong><small>初回受信から最終観測までの期間で計算</small></div></div><details class="details"><summary>分析の定義と保存範囲</summary><p class="hint">アプリ全体で直近最大100配信を保存します。公式APIは同じDJの配信を分析します。画面取得ではDJのIDを確実に得られないため、配信ごとに分けて集計します。参加者・再訪者は保存したIDで照合し、未記録の人を新規とは断定しません。1配信の参加者は1000人まで。受信前・切断中のイベントは補完しません。観測期間は休止・切断時間を含むことがあり、配信全体の時間ではありません。</p></details><div class="section-title"><h3>配信別レポート</h3><button id="export-analysis" type="button">分析CSVを保存</button></div><div class="table-wrap"><table><thead><tr><th>配信</th><th>コメント</th><th>ハート</th><th>スプーン</th><th>参加者</th></tr></thead><tbody id="analysis-rows"></tbody></table></div></section>
+<section class="card"><div class="section-title"><h2>保存分の貢献上位</h2><span class="hint">スプーン → ハート → コメント順</span></div><ol id="contributors" class="contributors"></ol></section>
+</div><div data-section-group="analysis" data-section-panel="logs" hidden=""><section class="card"><div class="section-title"><h2>受信ログ</h2><button id="export-events" type="button">ログCSVを保存</button></div><div class="filters"><input id="event-search" type="search" placeholder="名前・本文で検索" aria-label="ログを検索"><select id="event-type" aria-label="ログの種類"><option value="">すべての種類</option><option value="comment">コメント</option><option value="entry">入室</option><option value="heart">ハート</option><option value="spoon">スプーン</option><option value="follow">フォロー</option><option value="automatic">自動コメント送信</option><option value="automaticError">自動コメント失敗</option><option value="bot">ボット送信</option><option value="botError">ボット送信失敗</option></select></div><div id="events" class="event-list"></div><details class="details"><summary>記録とCSVの保存範囲</summary><p class="hint">直近100配信、1配信につきログ10,000件・参加者1000人まで保存します。集計値はログの上限を超えても加算します。ログは100件ずつ追加表示できます。CSVには検索結果にかかわらず、選択中の配信の保存済みデータ全件を含みます。</p></details></section>
+</div></div>
+<div id="view-settings" class="view" aria-labelledby="settings-heading" hidden="">
+      <div class="page-title"><div><h1 id="settings-heading">設定</h1><p class="page-description">目的別に設定を変更し、画面下の「設定を保存」でまとめて反映します。</p></div><span id="prefs-state" class="muted">保存済み</span></div>
+      <nav class="settings-tabs" aria-label="設定の分類"><button type="button" data-settings-tab="connection" aria-pressed="true">連携</button><button type="button" data-settings-tab="voice" aria-pressed="false">読み上げ</button><button type="button" data-settings-tab="automation" aria-pressed="false">自動コメント</button><button type="button" data-settings-tab="commands" aria-pressed="false">コマンド</button><button type="button" data-settings-tab="goals" aria-pressed="false">目標・定型文</button></nav>
+      <form id="v-settings-form" novalidate="">
+        <div data-settings-panel="connection">
+<section class="card" aria-labelledby="v-spoon-heading" hidden="">
+          <div class="section-heading"><h2 id="v-spoon-heading">Spoon に接続</h2></div>
+          <label class="field" for="v-spoon-source" hidden=""><span>配信情報の取得方法</span><select id="v-spoon-source"><option value="dom">配信ページから取得（API連携不要）</option><option value="api">Spoon 公式API</option></select></label>
+          <div id="v-spoon-api-fields" hidden="">
+            <label class="field" for="v-spoon-bridge-url"><span>連携サーバーの URL</span><input id="v-spoon-bridge-url" type="url" placeholder="http://127.0.0.1:17864" autocomplete="off" readonly=""></label>
+            <label class="field" for="v-spoon-bridge-key"><span>連携サーバーの接続キー</span><input id="v-spoon-bridge-key" type="password" autocomplete="off" spellcheck="false" readonly=""></label>
+            <p class="hint">API連携サーバーはこのアプリと一緒に起動します。Client IDとClient Secretは初回起動時の接続設定で登録します。</p>
+            <p class="hint">同意した DJ の配信を取得します。接続するとボット名の告知が配信に表示されます。入室通知にはボットのマネージャー指定が必要です。常連温度クリア通知は公式APIでは取得できません。</p>
+            <p class="hint">設定を保存後、「DJの連携設定を開く」で同意を取得してください。</p>
+            <p id="v-spoon-status" class="hint" role="status"></p>
+          </div>
+        </section>
+<section class="card" id="api-permissions"><h2>利用する機能</h2><div class="feature-grid"><label class="check-row"><input id="feature-donations" type="checkbox">ギフト履歴</label><label class="check-row"><input id="feature-fans" type="checkbox">公式ファンランキング</label><label class="check-row"><input id="feature-follow" type="checkbox">新規フォロー通知</label><label class="check-row"><input id="feature-chat" type="checkbox">画面からチャットを送信</label><label class="check-row"><input id="feature-djFollow" type="checkbox">ボットからDJをフォロー</label></div><p class="hint">受信開始時に、利用する機能のON/OFFにかかわらず全権限の同意を取得します。新規フォロー通知にはボットのマネージャー指定も必要です。</p><details class="details"><summary>開発者センターに登録する権限</summary><p class="hint">以下の全権限をアプリに登録してください：me.read ／ live.read ／ listeners.read ／ fans.read ／ events.chat ／ events.presence ／ events.like ／ events.donation ／ events.follow ／ donations.read ／ chat.send ／ dj.follow</p></details><button id="setup-reopen" type="button" class="text-button">API連携・起動時の設定…</button>
+</section>
+<section class="card"><h2>ボットを固定マネージャーにする準備</h2><p class="hint">配信中にボットからDJをフォローし、配信後にDJがSpoonアプリで固定マネージャーに指定します。</p><button id="follow-dj" type="button">ボットでこのDJをフォロー</button><p class="hint">フォローすると配信に通知されます。</p></section>
+</div>
+        <div data-settings-panel="voice" hidden=""><section class="card" aria-labelledby="v-connection-heading">
+          <label class="check-row"><input id="v-enabled" type="checkbox"><span>読み上げを有効にする</span></label><div class="section-heading"><h2 id="v-connection-heading">VOICEVOX に接続</h2><span class="step-label">接続先</span></div>
+          <label class="field" for="v-provider">
+            <span>利用する API</span>
+            <select id="v-provider">
+              <option value="legacy">WEB 版 VOICEVOX（tts.quest）</option>
+              <option value="engine">VOICEVOX ENGINE（ローカル / サーバー）</option>
+            </select>
+          </label>
+          <div id="v-legacy-fields">
+            <label class="field" for="v-api-key"><span>API キー</span></label>
+            <div class="input-action">
+              <input id="v-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="API キーを入力" aria-describedby="v-key-help">
+              <button id="v-show-key" class="inline-button" type="button" aria-label="API キーを表示" aria-pressed="false">表示</button>
+            </div>
+            <p id="v-key-help" class="hint">キーはこのPC内に保存します。入室時の自動コメントだけ使う場合は、読み上げを無効にすると不要です。</p>
+          </div>
+          <div id="v-engine-fields" hidden="">
+            <label class="field" for="v-engine-url"><span>エンジンの URL</span><input id="v-engine-url" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:50021" aria-describedby="v-engine-help"></label>
+            <p id="v-engine-help" class="hint">VOICEVOXを起動し、接続先のURLを指定してください。</p>
+          </div>
+        <div class="control-footer"><span class="hint">保存した接続先でHTTP応答と音声合成を確認します。</span><button id="v-diagnose-speech" type="button">API通信確認</button></div><p id="v-speech-diagnostic" class="result" role="status" hidden></p></section>
+<section class="card" aria-labelledby="v-output-heading">
+          <div class="section-heading"><h2 id="v-output-heading">音声の出力先</h2><button id="v-refresh-outputs" type="button" class="text-button">出力先を更新</button></div>
+          <label class="field" for="v-output-device"><span>読み上げを送るデバイス</span><select id="v-output-device" aria-describedby="v-output-status"><option value="">Windows の既定の出力先</option></select></label>
+          <p id="v-output-status" class="hint" role="status">出力先を確認しています…</p>
+          <p id="v-output-name" class="hint"></p>
+          <details class="settings-details"><summary>OBS・VoiceMeeterでマイク音声として使う</summary>
+            <p class="hint">VoiceMeeter または VB-CABLE をインストールすると、読み上げを仮想マイクへ渡せます。インストール後はWindowsを再起動し、「出力先を更新」を押してください。</p>
+            <ol><li>VoiceMeeter：上の出力先で「VoiceMeeter Input」を選んで設定を保存します。</li><li>VoiceMeeterの該当する仮想入力で B（Banana / Potato は B1）をONにします。</li><li>OBSで「音声入力キャプチャ」を追加し、「Voicemeeter Out B1」（旧名「VoiceMeeter Output」）を選びます。他のアプリでも同じデバイスをマイクに指定できます。</li></ol>
+            <p class="hint">VB-CABLEを使う場合：上の出力先を「CABLE Input」にして保存し、OBSの音声入力キャプチャやVoiceMeeterのハードウェア入力で「CABLE Output」を選びます。</p>
+            <p class="hint">自分でも聞く場合はVoiceMeeterの A / A1 もONにします。OBSで同じ音をデスクトップ音声からも取り込むと二重に聞こえるため、取り込み先を確認してください。</p>
+          </details>
+        <div class="control-footer"><span class="speech-status"><span id="v-status-dot" class="status-dot" aria-hidden="true"></span><span id="v-playback-status" role="status"></span></span><button id="v-test" type="button">読み上げ音声テスト</button></div><p id="v-test-status" class="hint" role="status"></p></section>
+<section class="card" aria-labelledby="v-voices-heading">
+          <div class="section-heading"><h2 id="v-voices-heading">声の割り当て</h2><span class="step-label">話し手</span></div>
+          <label class="field" for="v-system-speaker"><span>通知・コマンド返信の声</span><select id="v-system-speaker"></select></label>
+          <p class="hint">通知用のキャラクターは別スタイルも含めて専用に確保し、リスナーには割り当てません。変更すると、同じキャラクターを使っていたリスナーは別の声に割り当て直します。</p>
+          <details id="v-voice-pool-details" class="settings-details">
+            <summary><span>コメントに使う声</span><span id="v-pool-count" class="count-badge">—</span></summary>
+            <p class="hint">参加者に自動で 1 人ずつ割り当てます。</p>
+            <div class="pool-actions"><button id="v-select-all-voices" type="button" class="text-button">すべて選択</button><button id="v-refresh-voices" type="button" class="text-button">保存済み API から声を取得</button></div>
+            <div id="v-voice-pool" class="voice-pool" role="group" aria-label="コメントに使う声の候補"></div>
+          </details>
+          <details class="settings-details">
+            <summary>読み上げの調整</summary>
+            <div class="range-field"><label for="v-speed">話す速さ <output id="v-speed-value" for="v-speed">1.0 倍</output></label><input id="v-speed" type="range" min="0.5" max="2" step="0.1" value="1"></div>
+            <div class="range-field"><label for="v-volume">音量 <output id="v-volume-value" for="v-volume">100%</output></label><input id="v-volume" type="range" min="0" max="1" step="0.05" value="1"></div>
+            <label class="check-row"><input id="v-read-names" type="checkbox"><span>コメントの前に名前を読む</span></label>
+            <fieldset class="event-options"><legend>読み上げる内容</legend><div class="event-grid">
+              <label class="check-row"><input id="v-event-comment" type="checkbox" checked=""><span>コメント</span></label>
+              <label class="check-row"><input id="v-event-entry" type="checkbox" checked=""><span>入室</span></label>
+              <label class="check-row"><input id="v-event-heart" type="checkbox" checked=""><span>ハート</span></label>
+              <label class="check-row"><input id="v-event-spoon" type="checkbox" checked=""><span>Spoon</span></label>
+              <label class="check-row"><input id="v-event-temperature" type="checkbox" checked=""><span>常連温度</span></label>
+              <label class="check-row"><input id="v-event-follow" type="checkbox" checked=""><span>新規フォロー（API）</span></label>
+            </div></fieldset>
+            <p class="hint">入室・ハートなどの通知は、同じ文でも届くたびに読み上げます。</p>
+          </details>
+        </section>
+<section class="card" aria-labelledby="v-command-speech-heading"><h2 id="v-command-speech-heading">コマンド返信の読み上げ</h2><label class="check-row"><input id="v-command-speech-weather" type="checkbox"><span>天気予報の返信を読み上げる（/天気・/weather）</span></label><label class="check-row"><input id="v-command-speech-other" type="checkbox"><span>その他のコマンド返信を読み上げる（/help・/stats など）</span></label><p class="hint">読み上げが有効なとき、選んだ返信を通知用の声で読みます。OFFでもチャットへの返信とログの保存は行います。変更後は設定を保存してください。</p></section>
+<p class="hint">読み上げる本文・通知・名前は、選択した音声APIに送信します。</p></div>
+        <div data-settings-panel="automation" hidden=""><p class="hint">自動コメントは個別にON/OFFできます。設定を保存し、初回は「連携 → DJの連携設定を開く」からチャット送信を許可してください。送信状況は配信ツール → チャット・投票・抽選、送信内容・失敗は記録・分析 → 受信ログで確認できます。</p><section class="card" aria-labelledby="v-greeting-heading">
+          <div class="section-heading"><h2 id="v-greeting-heading">入室時の自動コメント</h2><span class="step-label">自動応答</span></div>
+          <label class="check-row"><input id="v-greeting-enabled" type="checkbox"><span>リスナーの入室時にコメントを自動送信する</span></label>
+          <p class="hint">公式APIでボットアカウントから送信します。初期設定は OFF です。ON にして保存し、チャット送信の同意を得ると、その後の入室から送信します。</p>
+          <label class="field" for="v-greeting-template"><span>送信するコメント（200文字以内）</span><textarea id="v-greeting-template" maxlength="200" rows="3" aria-describedby="v-greeting-help v-greeting-preview" spellcheck="false"></textarea></label>
+          <p id="v-greeting-help" class="hint">{name} が入室した人の名前に変わります。</p>
+          <p id="v-greeting-preview" class="greeting-preview"></p>
+          <label class="field" for="v-greeting-cooldown"><span>同じ人への送信頻度</span><select id="v-greeting-cooldown">
+            <option value="0">入室のたびに送信</option>
+            <option value="300" selected="">5分に1回まで</option>
+            <option value="600">10分に1回まで</option>
+          </select></label>
+          <p class="hint">有効にして保存後、DJ の同意画面でチャット送信の権限も許可してください。名前を含め200文字に収めてボット名で送信します。読み上げの ON / OFF とは別に設定できます。</p>
+          <p id="v-greeting-status" class="hint" role="status" aria-live="polite">自動コメントは OFF です。</p>
+        </section>
+<section class="card"><h2>ハートへの自動お礼</h2>
+ <label class="check-row"><input id="v-auto-heart-enabled" type="checkbox"><span>ハートが届いたらお礼を送る</span></label>
+ <label class="field" for="v-auto-heart-template"><span>送信文（改行可・200文字まで）</span><textarea id="v-auto-heart-template" rows="3" maxlength="200"></textarea></label>
+ <p class="hint">{name}：送信者、{amount}：届いた数量、{title}：配信タイトル</p>
+ <div class="inline-field"><label for="v-auto-heart-minimum">送信する最小数量</label><input id="v-auto-heart-minimum" type="number" min="1" max="1000000000"></div>
+ <label class="field" for="v-small-gift-template"><span>心ばかりの粗品のお礼（ハート0個・改行可・200文字まで）</span><textarea id="v-small-gift-template" rows="3" maxlength="200"></textarea></label>
+ <p class="hint">{name}：送信者、{amount}：0、{title}：配信タイトル。ハートのお礼がONなら、最小数量にかかわらず送信します。連続した贈り物にも届いた順にお礼を送ります。</p>
+ <p id="v-small-gift-preview" class="result"></p>
+ <p id="v-auto-heart-preview" class="result"></p></section>
+<section class="card"><h2>スプーンへの自動お礼</h2>
+ <label class="check-row"><input id="v-auto-spoon-enabled" type="checkbox"><span>スプーンが届いたらお礼を送る</span></label>
+ <label class="field" for="v-auto-spoon-template"><span>送信文（改行可・200文字まで）</span><textarea id="v-auto-spoon-template" rows="3" maxlength="200"></textarea></label>
+ <p class="hint">{name}：送信者、{amount}：届いた数量、{title}：配信タイトル</p>
+ <div class="inline-field"><label for="v-auto-spoon-minimum">送信する最小数量</label><input id="v-auto-spoon-minimum" type="number" min="1" max="1000000000"></div>
+ <p class="hint">連続した贈り物にも届いた順にお礼を送ります。自動コメントは3秒以上の間隔を空けて送信します。</p>
+ <p id="v-auto-spoon-preview" class="result"></p></section>
+<section class="card"><h2>定期お知らせ</h2>
+ <label class="check-row"><input id="v-announcement-enabled" type="checkbox"><span>配信中に定期的に案内を送る</span></label>
+ <label class="field" for="v-announcement-template"><span>お知らせ文（改行可・200文字まで）</span><textarea id="v-announcement-template" rows="3" maxlength="200"></textarea></label>
+ <div class="inline-field"><label for="v-announcement-interval">送信間隔</label><input id="v-announcement-interval" type="number" min="1" max="120"><span>分</span></div>
+ <p class="hint">{title} が配信タイトルになります。配信終了・受信停止中は送信しません。</p><p id="v-announcement-preview" class="result"></p></section>
+</div>
+      <div data-settings-panel="commands" hidden=""><section class="card"><h2>チャットコマンド（公式API）</h2><label class="check-row"><input id="commands-enabled" type="checkbox"><span>配信チャットの /help などに応答する</span></label><div class="inline-field"><label for="commands-cooldown">同じ人への応答間隔</label><input id="commands-cooldown" type="number" min="10" max="120" step="1"><span>秒（10〜120）</span></div><p class="hint">コマンド応答にはDJのチャット送信の同意が必要です。保存後、設定の「連携」からDJの同意を取得してください。</p></section>
+<p class="hint">コマンドはSpoonの配信チャットから送ります。<a href="#help/commands">コマンド一覧・天気予報の使い方を見る</a></p></div><div data-settings-panel="goals" hidden=""><section class="card"><h2>配信の目標</h2><div class="goal-input"><label for="heart-goal">ハート目標</label><input id="heart-goal" type="number" min="0" max="1000000000" step="1"></div><div class="goal-input"><label for="spoon-goal">スプーン目標</label><input id="spoon-goal" type="number" min="0" max="1000000000" step="1"></div><p class="hint">0を指定すると、その目標を無効にします。</p></section>
+<section class="card"><div class="section-title"><h2>チャットの定型文</h2><button id="add-template" type="button">＋ 定型文を追加</button></div><p class="hint">最大8件。配信ツールのチャットで選べます。</p><div id="templates"></div></section>
+</div></form>
+    </div>
+<div id="view-help" class="view" aria-labelledby="help-heading" hidden=""><div class="page-title"><div><h1 id="help-heading">ヘルプ</h1><p class="page-description">はじめ方、機能の場所、使い方をまとめています。</p></div></div><nav class="section-nav" aria-label="ヘルプの分類"><a href="#help/start" data-section-group="help" data-section-link="start">はじめ方</a><a href="#help/features" data-section-group="help" data-section-link="features">機能一覧</a><a href="#help/commands" data-section-group="help" data-section-link="commands">コマンド・天気</a><a href="#help/troubleshooting" data-section-group="help" data-section-link="troubleshooting">困ったとき</a></nav>
+<div data-section-group="help" data-section-panel="start" hidden=""><section class="card"><h2>配信を始めるまで</h2><ol class="guide-steps"><li><strong>Spoonとの連携を確認</strong><p>「設定 → 連携」で利用する機能を選び、DJの連携設定から同意を取得します。</p><a href="#settings/connection" data-settings-target="connection">連携設定を開く</a></li><li><strong>読み上げを準備</strong><p>音声APIまたは起動済みのVOICEVOXを指定し、声と読み上げ対象を選びます。設定を保存してから「読み上げテスト」で確認します。</p><a href="#settings/voice" data-settings-target="voice">読み上げ設定を開く</a></li><li><strong>受信を開始</strong><p>画面上部の「受信を開始」を押します。「配信状況」で集計、「参加者」で検出した人を確認できます。</p><a href="#overview">配信状況を開く</a></li></ol></section>
+<section class="card"><h2>設定変更と配信の切り替え</h2><p>設定は分類を切り替えても入力を保持します。画面下の「設定を保存」でまとめて反映し、「変更を破棄」で保存前の状態に戻します。</p><p>「表示する配信」で過去の記録も選べます。集計やCSVは選択した配信が対象です。チャット送信や投票の開始は現在の配信で行います。</p></section>
+<section class="card"><h2>利用できる機能</h2><p>公式APIで受信し、読み上げ・集計・チャット送信・自動コメント・投票・ゲーム・質問箱を利用できます。設定と記録はこのPCに保存します。</p><a href="#help/features">機能一覧で探す</a></section>
+</div><div data-section-group="help" data-section-panel="features" hidden=""><section class="card"><h2>機能を探す</h2><label class="field" for="help-search"><span>機能名・目的で検索</span><input id="help-search" type="search" placeholder="例：音声、CSV、質問"></label><p id="help-empty" class="empty-state" role="status" hidden="">一致する機能がありません。別の言葉で検索してください。</p><div id="feature-directory" class="feature-directory"><article data-help-feature=""><h3><a href="#overview">配信状況</a></h3><p>受信件数・目標の進捗・前回との比較。</p></article>
+<article data-help-feature=""><h3><a href="#records">参加者・個人記録</a></h3><p>名前で検索し、貢献・個人ステータスを確認。</p></article>
+<article data-help-feature=""><h3><a href="#records">参加者の声</a></h3><p>参加者ごとの声の変更・自動割り当て。</p></article>
+<article data-help-feature=""><h3><a href="#analysis/summary">配信の分析・CSV</a></h3><p>保存済み配信の推移・貢献上位・分析CSV。</p></article>
+<article data-help-feature=""><h3><a href="#analysis/logs">受信ログ・CSV</a></h3><p>名前や本文、通知の種類で検索・ログCSV保存。</p></article>
+<article data-help-feature=""><h3><a href="#settings/voice">読み上げ</a></h3><p>音声API・声・速度・音量・読み上げ対象。</p></article>
+<article data-help-feature=""><h3><a href="#settings/goals">目標</a></h3><p>ハート・スプーンの目標値。0で無効。</p></article>
+<article data-help-feature=""><h3><a href="#tools/chat">リスナー抽選</a></h3><p>対象の参加者から重複なしで抽選。結果は画面に表示。</p></article>
+<article data-help-feature=""><h3><a href="#tools/requests">質問・リクエスト</a></h3><p>受付の開始・停止・検索・対応状況の管理。</p></article>
+<article data-help-feature=""><h3><a href="#tools/requests">参加URL・質問箱</a></h3><p>将棋・リバーシ・質問箱のリスナー用URLを発行。</p></article>
+<article data-help-feature=""><h3><a href="#tools/chat">ボットからチャット</a></h3><p>定型文を選択してチャットを送信。</p></article>
+<article data-help-feature=""><h3><a href="#tools/chat">チャット投票</a></h3><p>質問と選択肢を入力して開始・締切・結果投稿。</p></article>
+<article data-help-feature=""><h3><a href="#settings/automation">自動コメント</a></h3><p>入室あいさつ・お礼・定期お知らせの文面と送信条件。</p></article>
+<article data-help-feature=""><h3><a href="#settings/goals">チャットの定型文</a></h3><p>チャット送信時に選べる文面を保存。</p></article>
+<article data-help-feature=""><h3><a href="#tools/games">ゲーム</a></h3><p>将棋・リバーシの盤面、サイコロ・おみくじ・じゃんけん・数当て。</p></article>
+<article data-help-feature=""><h3><a href="#help/commands">コマンド・天気予報</a></h3><p>Spoonチャットの「/」コマンド一覧・天気の使い方。</p></article>
+<article data-help-feature=""><h3><a href="#settings/commands">コマンド設定</a></h3><p>コマンド応答の有効化・同じ人への応答間隔。</p></article>
+<article data-help-feature=""><h3><a href="#settings/connection">Spoon連携・権限</a></h3><p>利用機能の選択・全権限の同意・マネージャー指定の準備。</p></article>
+</div></section>
+</div><div data-section-group="help" data-section-panel="commands" hidden=""><details id="command-guide" class="card" tabindex="-1" open=""><summary>チャットコマンド一覧と使い方</summary><div class="section-title"><h2>配信チャットの「/」コマンド</h2><span id="commands-badge" class="badge">確認中</span></div><p>Spoonの配信チャットから /help と送ると一覧を返信します。遊びは /help game、個人情報は /help status、DJ操作は /help dj。</p><p id="command-status" class="hint" role="status"></p><div class="filters"><input id="command-search" type="search" aria-label="コマンドを検索" placeholder="コマンド名・できることで検索"><select id="command-audience" aria-label="コマンドを使える人"><option value="">すべてのコマンド</option><option value="dj">DJの操作を含む</option></select></div><p id="command-empty" class="empty-state" hidden="" role="status">一致するコマンドがありません。検索条件を変更してください。</p><div class="table-wrap"><table class="command-table"><thead><tr><th>コマンド</th><th>できること</th><th>使える人</th></tr></thead><tbody id="command-list"></tbody></table></div><p class="hint">同じ人は10秒以上、配信全体では3秒以上の間隔が必要です。返信は200文字以内です。コマンドはログに残し、返信の読み上げは設定で選べます。</p><a href="#settings/commands" data-settings-target="commands">コマンドの有効・無効と送信間隔を設定 →</a></details><section class="card" id="weather-guide"><h2>天気予報</h2><p>配信チャットで都市・公園・施設の名前を検索し、その場所の天気・最高／最低気温・降水確率を返信します。</p><p><code>/天気 新宿御苑</code>　<code>/天気 八王子 明日</code>　<code>/weather New York tomorrow</code></p><p class="hint">日本語名は国土地理院の検索でも照合します。市区町村名に加え、新宿御苑などの公園・施設名、かな・漢字の表記揺れにも対応します。検索した場所を返信に表示するので確認してください。国・都道府県で絞る場合は <code>/天気 府中, 東京都</code>、<code>/weather Paris, France</code> のように指定してください。見つからない場合は別の表記でも試せます。<code>/help 天気</code>・<code>/help weather</code> で使い方を表示します。</p><p class="hint">日付と時刻は日本時間です。経過した時間帯は表示せず、今日の最高／最低気温は今後の時間帯から求めます。降水確率は表示した時間帯の1時間ごとの予報の最大値です。「設定 → 読み上げ」で天気予報の返信を読むか選べます。コマンド応答とDJのチャット送信の同意が必要です。</p><p class="hint">出典：<a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>／<a href="https://www.geonames.org/" target="_blank" rel="noreferrer">GeoNames</a>／<a href="https://maps.gsi.go.jp/" target="_blank" rel="noreferrer">国土地理院</a>。予報には取得時刻を表示します。</p></section>
+</div><div data-section-group="help" data-section-panel="troubleshooting" hidden=""><section class="card"><h2>困ったとき</h2><details class="details"><summary>読み上げが聞こえない</summary><p>「設定 → 読み上げ」で読み上げが有効か確認し、音声APIの接続先と音量を確認します。設定を保存してから「読み上げテスト」で試してください。音声の出力先を変更した場合は、接続中の機器が選ばれているか確認します。</p><a href="#settings/voice" data-settings-target="voice">読み上げ設定を開く</a></details><details class="details"><summary>集計や参加者が実際の配信と違う</summary><p>記録できるのは受信開始後に取得した情報です。受信前・切断中の情報は補完しません。参加者一覧には退出した人も残ります。保存済みの配信を見ている場合は「表示する配信」を現在の配信に切り替えてください。</p><a href="#analysis/logs">受信ログを確認</a></details><details class="details"><summary>チャットやコマンドが反応しない</summary><p>配信に接続し、現在の配信を選んでください。画面からの送信は「設定 → 連携」で有効にし、DJのチャット送信の同意を取得します。コマンド応答は「設定 → コマンド」で有効にします。コマンドはSpoonの配信チャットから送ってください。「ボットからチャット」の入力欄からは実行されません。</p><p>同じ人への応答間隔と配信全体の送信間隔があります。送信失敗は「記録・分析 → 受信ログ」で確認できます。</p><a href="#help/commands">コマンドの使い方を確認</a></details><details class="details"><summary>参加URL・質問箱が使えない</summary><p>アプリを起動して配信に接続し、「配信ツール → 質問・参加URL」からURLを発行します。参加者はページの確認コードをSpoonチャットへ送って本人確認します。質問箱は質問の受付も開始してください。</p><p>アプリ終了・配信終了・公開停止で一時URLは無効になります。再発行したURLを共有してください。</p><a href="#tools/requests">質問・参加URLを開く</a></details><details class="details"><summary>入室通知・自動あいさつが届かないとき</summary><p>入室通知には、DJの同意に加えてボットのマネージャー指定が必要です。指定がなくても通常コメントは届きます。</p><ol><li>このアプリで「受信を開始」し、ボットを配信に入れます。</li><li>DJのSpoonアプリで配信のリスナー一覧を開き、アプリを登録したボット用アカウントを選びます。</li><li>プロフィールの「マネージャー指定」を押します。数秒で反映され、次の入室から受信します。</li></ol><p class="hint">指定はSpoonアプリでDJが行います。固定マネージャーにする場合は、先にボットからDJをフォローし、配信終了後に指定してください。</p><p class="hint">指定済みでも届かない場合は、開発者センターで events.presence を登録し、設定 → 連携 →「DJの連携設定を開く」から再同意してください。読み上げは設定 → 読み上げ →「入室」、チャットへの返信は設定 → 自動コメント →「入室時の自動コメント」を有効にします。</p></details></section>
+</div></div>
+    <aside id="unsaved" class="save-bar" hidden=""><div><strong>未保存の変更</strong><p id="v-save-status" class="hint">すべての設定をまとめて保存します。</p></div><div class="save-actions"><button id="discard-changes" type="button">変更を破棄</button><button id="v-save" type="submit" form="v-settings-form" class="primary">設定を保存</button></div></aside>
+  </main><footer>記録と認証情報はこのPCのデスクトップアプリ専用フォルダーに保存します。</footer>
+
+
+
+
+
+
+</body></html>

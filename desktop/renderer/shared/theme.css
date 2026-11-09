@@ -1,0 +1,100 @@
+/* Shared palette for the manager, settings, startup dialog and game controls. */
+:root {
+  color-scheme: light;
+  --canvas: #f4f6f8;
+  --surface: #ffffff;
+  --surface-soft: #edf1f4;
+  --surface-hover: #e6ecef;
+  --ink: #243442;
+  --muted: #596b7b;
+  --line: #d6dfe5;
+  --accent: #167568;
+  --accent-hover: #105e54;
+  --accent-soft: #e4f3ef;
+  --on-accent: #ffffff;
+  --focus: #268cbe;
+  --success: #24704e;
+  --success-soft: #eaf5ee;
+  --success-line: #bedbc9;
+  --danger: #ac343b;
+  --danger-soft: #fceff0;
+  --danger-line: #e7c3c7;
+  --placeholder: #6b7c89;
+  --chart-bar: #90aaa5;
+  --backdrop: #18243280;
+  --opponent: #a44238;
+  color: var(--ink);
+  background: var(--canvas);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #141b23;
+  --surface: #1d2732;
+  --surface-soft: #25323f;
+  --surface-hover: #2d3d4b;
+  --ink: #e5edf3;
+  --muted: #acbdcb;
+  --line: #3a4c5b;
+  --accent: #76d4bf;
+  --accent-hover: #9be3d3;
+  --accent-soft: #203f3c;
+  --on-accent: #102f2b;
+  --focus: #7ec8f0;
+  --success: #8cd9ac;
+  --success-soft: #213c30;
+  --success-line: #3d6851;
+  --danger: #ffacb3;
+  --danger-soft: #422a32;
+  --danger-line: #79505c;
+  --placeholder: #9aafbf;
+  --chart-bar: #659d92;
+  --backdrop: #080d14b3;
+  --opponent: #ffb09f;
+}
+button, input, select, textarea, .card, th, .save-bar, .native-setup,
+.shortcut-grid a, .settings-tabs button[aria-pressed="true"] { background: var(--surface); }
+input, select, textarea, .save-bar { border-color: var(--line); }
+button:hover { background: var(--surface-hover); border-color: var(--line); }
+.primary, .header-actions #connect.receiving { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.primary:hover, .header-actions #connect.receiving:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, summary:focus-visible, .app-header :focus-visible { outline-color: var(--focus); }
+input::placeholder, textarea::placeholder { color: var(--placeholder); }
+.app-header { background: var(--surface); color: var(--ink); border-color: var(--line); }
+.app-header button { color: var(--ink); border-color: var(--line); }
+.header-actions #connect { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.header-actions #connect:hover { background: var(--surface-hover); }
+.header-actions #connect.receiving { background: var(--accent); color: var(--on-accent); }
+.header-connection { color: var(--muted); }
+.app-header .status-dot, .status-dot { background: var(--muted); }
+.app-header .status-dot.active, .status-dot.active { background: var(--success); }
+.app-header .status-dot.error, .status-dot.error { background: var(--danger); }
+.workspace-bar { background: var(--canvas); }
+.tabs a:hover, .section-nav a:hover, .settings-tabs button:hover { background: var(--surface-hover); color: var(--ink); }
+.section-nav a[aria-current="page"], .settings-tabs button[aria-pressed="true"],
+.chart-column.selected { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.analysis-metrics>div, .profile-metrics>div, .insight-grid>div, .result,
+.greeting-preview, .game-guide article, .setup-guide, .voice-pool, code { background: var(--surface-soft); }
+.chart-column:hover { background: var(--surface-hover); }
+.chart-column.selected:hover { background: var(--accent-soft); }
+.bar { background: var(--chart-bar); }
+.selected .bar { background: var(--accent); }
+td, th, .event, .request-item { border-color: var(--line); }
+#notice { color: var(--success); background: var(--success-soft); border-color: var(--success-line); }
+#notice.error { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-line); }
+.error { color: var(--danger); }
+.native-setup::backdrop { background: var(--backdrop); }
+.board-axis, .square-empty { color: var(--muted); }
+.board-square { background: var(--surface-soft); color: var(--ink); border-color: var(--line); }
+.opponent .square-piece { color: var(--opponent); }
+.board-square.possible { background: var(--accent-soft); }
+.board-square.selected { background: var(--accent-soft); outline-color: var(--accent); }
+.board-square:focus-visible { outline-color: var(--focus); }
+.workspace-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-left: auto; }
+.theme-picker { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.theme-picker select { padding: 6px; font-size: 12px; }
+@media (max-width: 650px) {
+  .workspace-controls { margin-left: 0; justify-content: space-between; }
+  .session-picker { flex: 1; }
+  .session-picker select { width: auto; }
+}

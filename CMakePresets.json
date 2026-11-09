@@ -1,0 +1,84 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 4,
+    "minor": 2,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-base",
+      "hidden": true,
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "${sourceDir}/.local/build/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "set"
+      },
+      "environment": {
+        "VSLANG": "1033"
+      },
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/dist/spoon-manager",
+        "FETCHCONTENT_BASE_DIR": "${sourceDir}/.local/cpp-deps",
+        "BUILD_TESTING": true
+      }
+    },
+    {
+      "name": "windows-debug",
+      "displayName": "Windows x64 Debug",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 Release",
+      "inherits": "windows-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "configuration": "Debug"
+    },
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "configuration": "Release"
+    }
+  ]
+}
