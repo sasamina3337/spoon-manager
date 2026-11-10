@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 if(POLICY CMP0168)
     cmake_policy(SET CMP0168 NEW)
 endif()
-project(SpoonManager VERSION 2.8.1 LANGUAGES C CXX RC)
+project(SpoonManager VERSION 2.8.2 LANGUAGES C CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "Spoon Manager requires Windows (WinHTTP and Windows audio).")

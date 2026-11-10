@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ChatCommands, COMMAND_NAMES, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceListMessage} from '../desktop/renderer/background/chat-commands.js';
+import {ChatCommands, COMMAND_NAMES, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceListMessage, resolveVoice} from '../desktop/renderer/background/chat-commands.js';
 
 test('commands require a whole slash-prefixed message; replies never trigger another command', () => {
   assert.deepEqual(parseCommand(' /VOICE  3 '), {name: 'voice', args: ['3']});
@@ -37,7 +37,7 @@ test('voice list pages include every ID, full name and style within the chat lim
     const reply = botMessage(voiceListMessage(voices, String(page)));
     assert.ok(reply.length <= 200);
     assert.ok(reply.includes(`音声一覧 ${page}/${total}（全30件）`));
-    assert.ok(reply.includes('変更: /voice ID'));
+    assert.ok(reply.includes('変更: /voice ID・名前'));
     assert.equal(reply.includes(`次: /voice list ${page + 1}`), page < total);
     assert.equal(parseCommand(reply), null);
     entries.push(...reply.split('\n').filter(line => /^\d+: /.test(line)));
@@ -58,7 +58,38 @@ test('voice list handles invalid pages, empty catalogs and unusually long Unicod
   const last = botMessage(voiceListMessage(voices, '2'));
   assert.ok(last.length <= 200);
   assert.match(last, /0: 次の声（ノーマル）/);
-  assert.ok(last.endsWith('変更: /voice ID'));
+  assert.ok(last.endsWith('変更: /voice ID・名前'));
+});
+
+test('voice names select a normal style while full names, spaced styles and numeric IDs select the requested voice', () => {
+  const voices = [{id: 0, name: '四国めたん（あまあま）'}, {id: 2, name: '四国めたん（ノーマル）'},
+    {id: 8, name: '春日部つむぎ（ささやき）'}, {id: 10, name: '白上虎太郎（ふつう）'},
+    {id: 12, name: 'Alice Smith (Normal)'}, {id: 13, name: 'Alice Smith (Happy)'}];
+  for (const input of ['四国めたん', '四国めたん ノーマル', '四国めたん(ノーマル)', '2', '２']) assert.equal(resolveVoice(voices, input).voice.id, 2, input);
+  for (const input of ['四国めたん あまあま', '四国めたん（あまあま）', ' 四国めたん　( あまあま ) ']) assert.equal(resolveVoice(voices, input).voice.id, 0, input);
+  assert.equal(resolveVoice(voices, '春日部つむぎ').voice.id, 8);
+  assert.equal(resolveVoice(voices, '白上虎太郎').voice.id, 10);
+  assert.equal(resolveVoice(voices, 'ALICE　SMITH').voice.id, 12);
+  assert.equal(resolveVoice(voices, 'Alice Smith Happy').voice.id, 13);
+  assert.match(helpMessage(['voice'], 10), /\/voice 四国めたん/);
+  assert.ok(botMessage(helpMessage(['voice'], 10)).length <= 200);
+});
+
+test('ambiguous names, unknown names and reserved voices never resolve to an arbitrary voice', () => {
+  const voices = [{id: 0, name: '四国めたん（あまあま）'}, {id: 6, name: '四国めたん（ささやき）'}];
+  const ambiguous = resolveVoice(voices, '四国めたん');
+  assert.equal(ambiguous.voice, undefined);
+  assert.match(ambiguous.message, /候補が複数/);
+  assert.match(ambiguous.message, /0: 四国めたん/);
+  assert.match(ambiguous.message, /6: 四国めたん/);
+  for (const query of ['四国', '知らない声', '0 お願い', '99']) {
+    assert.equal(resolveVoice(voices, query).voice, undefined);
+    assert.match(resolveVoice(voices, query).message, /一致する声がありません/);
+  }
+  for (const query of ['四国めたん', '四国めたん あまあま', '6']) {
+    const result = resolveVoice(voices, query, [0, 6]);
+    assert.equal(result.voice, undefined); assert.match(result.message, /通知専用/);
+  }
 });
 
 function fixture(extra = {}) {

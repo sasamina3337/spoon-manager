@@ -1,4 +1,4 @@
-import {ChatCommands, parseCommand, helpMessage, voiceListMessage, chatText, isCommandEnabled} from './background/chat-commands.js';
+import {ChatCommands, parseCommand, helpMessage, voiceListMessage, resolveVoice, chatText, isCommandEnabled} from './background/chat-commands.js';
 import {requestSubmission, restoreRequests, setRequestsOpen, submitRequest, updateRequestStatus} from './background/requests.js';
 import {executeBoard, boardSummary} from './background/board-games.js';
 import {newReversi, newShogi, moveReversi, moveShogi, SHOGI_PIECES} from './background/board-rules.js';
@@ -289,7 +289,7 @@ export class NativeRuntime {
     const profile = runtime.profiles[user.id] ||= {name: user.name, counters: {}};
     profile.name = user.name; profile.updatedAt = this.now(); profile.counters = {...Object.fromEntries(counterNames.map(key => [key, 0])), ...profile.counters};
     const djOnly = () => {if (!event.isDj) throw new Error('この操作はDJ専用です。');};
-    const voices = list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES;
+    let voices = list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES;
     const mine = session.users.find(item => item.id === user.id) || {};
     if (name === 'help') return helpMessage(args, raw.manager.preferences.commands.cooldownSeconds);
     if (name === 'stats') return `${session.live.title}\nコメント ${session.totals.comments} / ハート ${session.totals.hearts} / スプーン ${session.totals.spoons}\n検出 ${session.users.length}人`;
@@ -313,11 +313,28 @@ export class NativeRuntime {
       return `ハート ${session.totals.hearts}/${raw.manager.preferences.heartGoal}\nスプーン ${session.totals.spoons}/${raw.manager.preferences.spoonGoal}`;
     }
     if (name === 'voice') {
-      if (args[0] === 'list') return voiceListMessage(voices, args[1]);
+      if (args[0]?.toLowerCase() === 'help') return helpMessage(['voice'], raw.manager.preferences.commands.cooldownSeconds);
+      const provider = raw.settings?.provider;
+      const engineUrl = raw.settings?.engineUrl;
+      const catalogMatchesSettings = list(raw.runtime?.voices).length > 0 && raw.runtime?.voiceProvider === provider &&
+        (provider !== 'engine' || raw.runtime?.voiceEngineUrl === engineUrl);
+      if (!catalogMatchesSettings) voices = LEGACY_VOICES;
+      if (!catalogMatchesSettings) {
+        try {
+          const refreshed = await this.call('voice-catalog', {});
+          if (Array.isArray(refreshed) && refreshed.length) {
+            voices = refreshed;
+            runtime.voices = voices;
+            runtime.voiceProvider = provider;
+            runtime.voiceEngineUrl = engineUrl;
+          }
+        } catch {}
+      }
+      if (args[0]?.toLowerCase() === 'list') return voiceListMessage(voices, args[1]);
       if (args.length) {
-        const speaker = Number(args[0]);
-        if (!voices.some(voice => voice.id === speaker) || notificationVoiceIds(voices, raw.settings.systemSpeaker).includes(speaker)) return '選べる声を /voice list で確認してください。通知用の声は選べません。';
-        runtime.assignments[user.id] = speaker;
+        const result = resolveVoice(voices, args.join(' '), notificationVoiceIds(voices, raw.settings.systemSpeaker));
+        if (!result.voice) return result.message;
+        runtime.assignments[user.id] = result.voice.id;
       }
       const speaker = assignedSpeaker({...raw, runtime}, user.id);
       return `${user.name}さんの声：${voices.find(voice => voice.id === speaker)?.name || speaker}`;
@@ -372,7 +389,7 @@ export class NativeRuntime {
       if (!place) return '/天気 市区町村名 [今日|明日|明後日]';
       const weather = await this.call('weather', {place, day}), daily = weather.daily, code = daily.weather_code[day];
       const description = code === 0 ? '快晴' : code <= 3 ? '晴れ・曇り' : code <= 48 ? '霧' : code <= 67 ? '雨' : code <= 77 ? '雪' : code <= 82 ? 'にわか雨' : code <= 86 ? 'にわか雪' : '雷雨';
-      return `${weather.place} ${daily.time[day]}\n${description} ${daily.temperature_2m_min[day]}〜${daily.temperature_2m_max[day]}℃\n降水確率 ${daily.precipitation_probability_max[day] ?? '不明'}%\n出典：Open-Meteo / GeoNames`;
+      return `${weather.place} ${daily.time[day]}\n${description} ${daily.temperature_2m_min[day]}〜${daily.temperature_2m_max[day]}℃\n降水確率 ${daily.precipitation_probability_max[day] ?? '不明'}%\n出典：${weather.source || 'Open-Meteo / GeoNames'}`;
     }
     if (name === 'play' || name === '質問箱') return this.portalStatus.links.find(link => link.kind === (name === '質問箱' ? 'question' : args[0]))?.url || '配信ツールから参加URLを公開してください。';
     if (name === '参加') return '参加ページの確認コードを指定してください。';

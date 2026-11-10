@@ -126,8 +126,8 @@ details.card[open]>summary { margin-bottom: 16px; }
 .game-guide p { color: var(--muted); font-size: 10px; }
 .badge, .count-badge { display: inline-block; padding: 2px 7px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10px; }
 code { padding: 2px 4px; border-radius: 4px; background: #f5f0e9; font: 11px Consolas, monospace; }
-.settings-tabs { display: flex; gap: 4px; padding: 4px; margin-bottom: 14px; border-radius: 9px; background: #e9ede5; }
-.settings-tabs button { flex: 1; border: 0; color: var(--muted); background: transparent; }
+.settings-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 14px; border-radius: 9px; background: #e9ede5; }
+.settings-tabs button { flex: 1 1 120px; border: 0; color: var(--muted); background: transparent; }
 .settings-tabs button[aria-pressed="true"] { color: var(--ink); background: white; box-shadow: 0 1px 3px #2636310a; }
 .feature-grid, .event-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
 .check-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 11px; }

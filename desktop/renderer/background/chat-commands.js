@@ -25,7 +25,7 @@ export const COMMANDS = [
   {name: 'shogi', usage: '/shogi 7七 7六 [成]', description: '/shogi start で開始。漢字の盤面と縦横座標で将棋', audience: '全員'},
   {name: 'game', usage: '/game', description: 'ミニゲームの案内と自分の成績', audience: '全員'},
   {name: 'goal', usage: '/goal', description: 'ハート・スプーンの目標進捗', audience: '全員'},
-  {name: 'voice', usage: '/voice [ID]', description: '自分の声を確認、ID指定で変更', audience: '全員'},
+  {name: 'voice', usage: '/voice [ID・名前]', description: '自分の声を確認、ID・名前・スタイル指定で変更', audience: '全員'},
   {name: 'voice', usage: '/voice list [ページ]', description: '利用可能な声のID・名前・スタイルを一覧表示', audience: '全員'},
   {name: 'draw', usage: '/draw [1〜5]', description: '現在のリスナーから抽選して結果を投稿', audience: 'DJのみ'},
   {name: 'poll', usage: '/poll 質問 | 選択肢1 | 選択肢2', description: '投票開始。/poll end で締切、/poll で集計', audience: '開始・締切はDJのみ'},
@@ -45,6 +45,7 @@ export const HELP_MESSAGE = 'コマンド\n/stats 集計 /me 自分\n/goal 進�
 export function helpMessage(args, cooldown) {
   if (args.length > 1) return '/help・/help game・/help status・/help dj から選んでください。';
   if (['shogi', 'reversi'].includes(args[0])) return BOARD_HELP[args[0]];
+  if (args[0] === 'voice') return '声の選択\n/voice 今の声を確認\n/voice 四国めたん 名前で選択\n/voice 四国めたん あまあま スタイル指定\n/voice 8 IDで選択\n/voice list [ページ] 一覧\n名前だけならノーマル・ふつうを優先します。通知専用の声は選べません。';
   if (['weather', '天気'].includes(args[0])) return '天気予報（日本時間）\n/天気 東京 [今日|明日|明後日]\n/weather New York tomorrow\n市区町村名で検索し、天気・最低／最高気温・降水確率を表示します。見つからない場合は英語の都市名も試してください。読み上げは設定で選べます。\n出典：Open-Meteo／GeoNames';
   if (args[0] === 'game') return '遊び\n/dice [2d6] サイコロ\n/omikuji 運勢\n/janken グー|チョキ|パー\n/guess start → /guess 1〜20 数当て\n/reversi start リバーシ\n/shogi start 将棋\n/help reversi・/help shogi で操作説明\n/game 自分の成績。無料・景品なし';
   if (args[0] === 'status') return '/status 今回の自分の貢献、/status total 保存済み配信分の合計、/me 自分の記録、/rank spoon|heart|comment 今回の順位。受信・保存できた範囲だけを集計します。';
@@ -81,7 +82,7 @@ export function voiceListMessage(voices, page = '1') {
   if (!/^\d+$/.test(page) || !Number.isSafeInteger(Number(page)) || Number(page) < 1) return '使い方：/voice list [ページ番号（1以上）]';
   if (!voices.length) return '利用可能な音声はありません。読み上げ設定で音声一覧を更新してください。';
   const header = (current, total) => `音声一覧 ${current}/${total}（全${voices.length}件）`;
-  const footer = next => `変更: /voice ID${next ? `\n次: /voice list ${next}` : ''}`;
+  const footer = next => `変更: /voice ID・名前${next ? `\n次: /voice list ${next}` : ''}`;
   // Reserve the longest possible page numbers and count formatting before the 200-character limit.
   const fits = rows => formatBotMessage(`${header(voices.length, voices.length)}\n${rows.join('\n')}\n${footer(voices.length)}`).length <= 200;
   const pages = [];
@@ -100,6 +101,25 @@ export function voiceListMessage(voices, page = '1') {
   const current = Number(page);
   if (current > pages.length) return `音声一覧は1〜${pages.length}ページです。/voice list ページ番号 で確認してください。`;
   return `${header(current, pages.length)}\n${pages[current - 1].join('\n')}\n${footer(current < pages.length ? current + 1 : null)}`;
+}
+
+export function resolveVoice(voices, input, reservedIds = []) {
+  const normalize = value => String(value ?? '').normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+  const query = normalize(input);
+  const character = voice => normalize(voice.name).replace(/\([^()]*\)$/, '');
+  const exact = /^\d+$/.test(query)
+    ? voices.filter(voice => voice.id === Number(query) && Number.isSafeInteger(voice.id))
+    : voices.filter(voice => normalize(voice.name) === query || normalize(voice.name).replace(/[()]/g, '') === query);
+  const candidates = exact.length || /^\d+$/.test(query) ? exact : voices.filter(voice => character(voice) === query);
+  if (!candidates.length) return {message: '一致する声がありません。/voice list でID・名前・スタイルを確認してください。'};
+  let available = candidates.filter(voice => !reservedIds.includes(voice.id));
+  if (!available.length) return {message: '通知専用の声は選べません。/voice list で別の声を選んでください。'};
+  if (!exact.length && available.length > 1) {
+    const normal = available.filter(voice => /\((ノーマル|ふつう|normal)\)$/.test(normalize(voice.name)));
+    if (normal.length === 1) available = normal;
+  }
+  if (available.length === 1) return {voice: available[0]};
+  return {message: chatText('声の候補が複数あります。/voice ID または名前とスタイルで指定してください。\n' + available.slice(0, 3).map(voice => `${voice.id}: ${voice.name}`).join('\n') + '\n一覧: /voice list')};
 }
 
 function waitForChat(milliseconds, signal) {

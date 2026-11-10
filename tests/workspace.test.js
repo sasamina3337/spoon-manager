@@ -67,6 +67,15 @@ for (const base of applications) {
     assert.equal(doc.querySelector('[data-settings-panel=connection]').hidden, false);
   });
 
+  test(`${base}: configuration controls are grouped under settings, separate from active features`, t => {
+    const {doc} = workspace(t);
+    assert.equal(doc.querySelector('#v-participants').closest('[data-settings-panel]').dataset.settingsPanel, 'voice');
+    assert.equal(doc.querySelector('#view-records #v-participants'), null);
+    assert.equal(doc.querySelector('#theme-mode').closest('[data-settings-panel]').dataset.settingsPanel, 'display');
+    assert.equal(doc.querySelector('[data-view="tools"]').textContent.trim(), '機能');
+    assert.ok(doc.querySelector('#view-tools [data-section-panel="chat"]'));
+  });
+
   test(`${base}: feature search handles matching, no results and clearing without removing links`, t => {
     const {doc} = workspace(t, '#help/features');
     const search = doc.getElementById('help-search');

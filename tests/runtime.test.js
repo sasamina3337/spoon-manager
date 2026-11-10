@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createNativeAdapter} from '../desktop/renderer/native-entry.js';
-import {DEFAULT_SETTINGS} from '../desktop/renderer/shared/settings.js';
+import {DEFAULT_SETTINGS, LEGACY_VOICES} from '../desktop/renderer/shared/settings.js';
 import {SPOON_SCOPES} from '../desktop/renderer/shared/spoon-permissions.js';
 import {COMMAND_NAMES, parseCommand} from '../desktop/renderer/background/chat-commands.js';
 
@@ -10,12 +10,13 @@ function fixture() {
   const key = 'api:dj:1', user = {id:'api:dj:u', name:'リスナー'};
   const raw = {settings:{...structuredClone(DEFAULT_SETTINGS), enabled:false}, manager:{preferences:{heartGoal:100, spoonGoal:100, commands:{enabled:true,cooldownSeconds:10},features:{chat:true}}, sessions:[{key,live:{title:'テスト配信'},users:[{...user,comments:1}],events:[],totals:{comments:1,entries:0,hearts:0,spoons:0,follows:0},requests:{open:false,items:[]}}]},_native:{activeKey:key,receiving:true,authorized:true,connectionState:'connected',listeners:[user],scopes:SPOON_SCOPES.join(' ')}};
   let portalActions=[];
+  let voiceCatalog = [{id:2,name:'取得した声'}];
   const calls = [], adapter = createNativeAdapter({now:() => clock, call:async (operation,input) => {
     calls.push({operation,input:structuredClone(input)});
     if (operation === 'snapshot') return structuredClone(raw);
     if (operation === 'save-runtime') raw.runtime = structuredClone(input.runtime);
     if (operation === 'save-settings') {raw.settings=input.settings; raw.manager.preferences=input.preferences;}
-    if (operation === 'voice-catalog') return [{id:2,name:'取得した声'}];
+    if (operation === 'voice-catalog') return structuredClone(voiceCatalog);
     if (operation === 'manager-action') return input.action === 'fans' ? {fans:[{nickname:'ファン',rank:1}],sessionKey:key} : {listeners:[user]};
     if (operation === 'connection') return {clientId:'id',clientSecret:'secret'};
     if (operation === 'authorization-url') return 'https://developers.spooncast.net/jp/oauth/authorize?state=test';
@@ -26,7 +27,7 @@ function fixture() {
   }});
   const event = (text, extra={}) => raw.manager.sessions[0].events.push({id:'event:'+raw.manager.sessions[0].events.length,type:'comment',text,user,time:new Date(clock).toISOString(),...extra});
   adapter.runtime.prime(raw);
-  return {raw,calls,adapter,user,key,event,portal:action=>portalActions.push(action),advance:() => {clock+=10000;}};
+  return {raw,calls,adapter,user,key,event,portal:action=>portalActions.push(action),setVoiceCatalog:voices=>{voiceCatalog=voices;},advance:() => {clock+=10000;}};
 }
 
 test('request intake and status changes persist, duplicate events are not processed twice', async () => {
@@ -94,6 +95,42 @@ test('board commands, voices and automated replies are connected to durable nati
   f.advance(); f.event('入室',{type:'entry'}); const before=f.calls.filter(call=>call.operation==='send-generated').length;
   await f.adapter.runtime.tick(); await f.adapter.runtime.outbox;
   assert.equal(f.calls.filter(call=>call.operation==='send-generated').length,before);
+});
+
+test('voice commands persist name and style selections, retain numeric IDs and preserve assignments on invalid or reserved names', async () => {
+  const f = fixture();
+  f.setVoiceCatalog([...LEGACY_VOICES, {id: 17, name: '九州そら（ノーマル）'}]);
+  f.raw.settings.systemSpeaker = 3;
+  const run = async text => {
+    f.advance(); f.event(text);
+    await f.adapter.runtime.tick(); await f.adapter.runtime.commands.chain; await f.adapter.runtime.outbox;
+  };
+  await run('/voice 四国めたん');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 2);
+  assert.equal((await f.adapter.message({type: 'GET_STATE'})).participants[0].speaker, 2);
+  assert.match(f.calls.filter(call => call.operation === 'send-generated').at(-1).input.text, /四国めたん（ノーマル）/);
+  await run('/voice 四国めたん あまあま');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 0);
+  await run('/voice 春日部つむぎ（ノーマル）');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 8);
+  await run('/voice 2');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 2);
+  await run('/voice 九州そら');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 17);
+  await run('/voice 17');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 17);
+  await run('/voice list');
+  assert.match(f.calls.filter(call => call.operation === 'send-generated').at(-1).input.text, /音声一覧 1\//);
+  await run('/voice help');
+  assert.match(f.calls.filter(call => call.operation === 'send-generated').at(-1).input.text, /\/voice 四国めたん/);
+  assert.equal(f.calls.filter(call => call.operation === 'voice-catalog').length, 1);
+  for (const query of ['知らない声', 'ずんだもん', 'ずんだもん あまあま']) {
+    await run('/voice ' + query); assert.equal(f.raw.runtime.assignments[f.user.id], 17);
+  }
+  f.raw.runtime.voices = [{id: 40, name: '候補の声（やさしい）'}, {id: 41, name: '候補の声（元気）'}];
+  await run('/voice 候補の声');
+  assert.equal(f.raw.runtime.assignments[f.user.id], 17);
+  assert.match(f.calls.filter(call => call.operation === 'send-generated').at(-1).input.text, /候補が複数/);
 });
 test('receive prompts for authorization before connecting, then resumes automatically', async () => {
   const f=fixture(); f.raw._native.authorized=false; f.raw._native.receiving=false;

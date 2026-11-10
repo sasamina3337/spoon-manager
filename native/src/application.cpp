@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cctype>
 #include <deque>
 #include <mutex>
 #include <set>
@@ -573,11 +574,59 @@ Json Application::weather(const std::string& place, int day) {
         if (!body.is_object()) throw std::runtime_error("天気情報の形式を確認できませんでした。");
         return body;
     };
-    const auto geocode = get("https://geocoding-api.open-meteo.com/v1/search?name=" + percent_encode(place) + "&count=1&language=ja&format=json");
-    if (!geocode.contains("results") || !geocode["results"].is_array() || geocode["results"].empty()) throw std::runtime_error("地域が見つかりませんでした。市区町村名で指定してください。");
-    const auto location = geocode["results"][0];
+    Json location;
+    bool used_gsi = false;
+    auto place_key = place;
+    std::transform(place_key.begin(), place_key.end(), place_key.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    const bool tokyo_alias = place == "東京" || place == "東京都" || place_key == "tokyo";
+    if (!tokyo_alias && std::any_of(place.begin(), place.end(), [](unsigned char character) { return character >= 0x80; })) {
+        try {
+            const auto response = HttpClient{}.request("GET", "https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + percent_encode(place));
+            if (response.status == 200) {
+                const auto results = Json::parse(response.body, nullptr, false);
+                if (results.is_array()) for (const auto& result : results) {
+                    if (!result.is_object() || !result.contains("geometry") || !result["geometry"].is_object() ||
+                        !result["geometry"].contains("coordinates") || !result["geometry"]["coordinates"].is_array() ||
+                        result["geometry"]["coordinates"].size() < 2 || !result["geometry"]["coordinates"][0].is_number() ||
+                        !result["geometry"]["coordinates"][1].is_number() || !result.contains("properties") ||
+                        !result["properties"].is_object() || !result["properties"].contains("title") ||
+                        !result["properties"]["title"].is_string()) continue;
+                    const auto title = result["properties"]["title"].get<std::string>();
+                    bool matches = true;
+                    for (std::size_t start = 0; start < place.size();) {
+                        while (start < place.size() && (place[start] == ' ' || place[start] == '\t' || place[start] == ',')) ++start;
+                        if (start == place.size()) break;
+                        auto end = place.find_first_of(" \t,", start);
+                        if (end == std::string::npos) end = place.size();
+                        if (title.find(place.substr(start, end - start)) == std::string::npos) { matches = false; break; }
+                        start = end;
+                    }
+                    if (!matches) continue;
+                    location = {{"name", result["properties"]["title"]},
+                        {"longitude", result["geometry"]["coordinates"][0]},
+                        {"latitude", result["geometry"]["coordinates"][1]}};
+                    used_gsi = true;
+                    break;
+                }
+            }
+        } catch (...) {}
+    }
+    if (!location.is_object()) {
+        const auto geocode_place = tokyo_alias ? "Tokyo" : place;
+        const auto geocode = get("https://geocoding-api.open-meteo.com/v1/search?name=" + percent_encode(geocode_place) + "&count=10&language=ja&format=json");
+        if (!geocode.contains("results") || !geocode["results"].is_array() || geocode["results"].empty()) throw std::runtime_error("地域が見つかりませんでした。市区町村名で指定してください。");
+        const auto& results = geocode["results"];
+        const auto exact = std::find_if(results.begin(), results.end(), [&](const Json& result) {
+            return tokyo_alias ? text(result, "country_code") == "JP" && text(result, "admin1") == "東京都"
+                : text(result, "name") == place;
+        });
+        location = exact != results.end() ? *exact : results[0];
+    }
     auto forecast = get("https://api.open-meteo.com/v1/forecast?latitude=" + location.at("latitude").dump() + "&longitude=" + location.at("longitude").dump() + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=3");
-    return {{"place", text(location, "name", place)}, {"day", day}, {"daily", forecast.at("daily")}};
+    return {{"place", text(location, "name", place)}, {"source", used_gsi ? "国土地理院 / Open-Meteo" : "Open-Meteo / GeoNames"},
+        {"day", day}, {"daily", forecast.at("daily")}};
 }
 
 void Application::export_csv(const std::filesystem::path& file, const std::string& kind, const std::string& key) {

@@ -6,7 +6,7 @@
     <p id="notice" role="status" hidden=""></p>
     
     <section id="setup-guide" class="setup-guide" hidden=""><h2>配信の取得を始めましょう</h2><p id="setup-text">DJの同意後に受信を開始できます。</p><button id="setup-settings" type="button">接続設定を開く</button></section>
-    <div class="workspace-bar"><nav class="tabs" aria-label="管理画面の切り替え"><a href="#overview" data-view="overview" aria-current="page">配信状況</a><a href="#records" data-view="records">参加者</a><a href="#tools" data-view="tools">配信ツール</a><a href="#analysis" data-view="analysis">記録・分析</a><a href="#settings" data-view="settings">設定</a><a href="#help" data-view="help">ヘルプ</a></nav>
+    <div class="workspace-bar"><nav class="tabs" aria-label="管理画面の切り替え"><a href="#overview" data-view="overview" aria-current="page">配信状況</a><a href="#records" data-view="records">参加者</a><a href="#tools" data-view="tools">機能</a><a href="#analysis" data-view="analysis">記録・分析</a><a href="#settings" data-view="settings">設定</a><a href="#help" data-view="help">ヘルプ</a></nav>
 <div class="workspace-controls"><label class="session-picker"><span>表示する配信</span><select id="session"><option value="">現在の配信</option></select></label></div></div>
 
     
@@ -20,34 +20,29 @@
 
       
       
-    <div class="shortcut-grid" aria-label="よく使う操作"><a href="#tools"><strong>配信ツール</strong><span>質問受付・チャット・ゲーム</span></a><a href="#settings/voice" data-settings-target="voice"><strong>読み上げ設定</strong><span>接続先・声・読み上げ対象</span></a><a href="#analysis"><strong>記録・分析</strong><span>配信の推移・受信ログ・CSV</span></a><a href="#help"><strong>ヘルプ</strong><span>はじめ方・機能一覧・困ったとき</span></a></div></div>
+    <div class="shortcut-grid" aria-label="よく使う操作"><a href="#tools"><strong>機能</strong><span>質問受付・チャット・ゲーム</span></a><a href="#settings/voice" data-settings-target="voice"><strong>読み上げ設定</strong><span>接続先・声・読み上げ対象</span></a><a href="#analysis"><strong>記録・分析</strong><span>配信の推移・受信ログ・CSV</span></a><a href="#help"><strong>ヘルプ</strong><span>はじめ方・機能一覧・困ったとき</span></a></div></div>
 
     
 <div id="view-records" class="view" aria-labelledby="records-heading" hidden="">
-      <div class="page-title"><div><h1 id="records-heading">参加者</h1><p class="page-description">参加者の貢献・個人記録・読み上げ音声を確認します。</p></div></div>
+      <div class="page-title"><div><h1 id="records-heading">参加者</h1><p class="page-description">参加者の貢献と個人記録を確認します。声の割り当ては<a href="#settings/voice" data-settings-target="voice">設定 → 読み上げ</a>で行います。</p></div></div>
       <div class="columns wide-left"><section class="card"><div class="section-title"><h2>参加者と貢献</h2><button id="export-users" type="button">参加者CSVを保存</button></div><div class="filters"><input id="user-search" type="search" placeholder="名前で検索" aria-label="参加者の名前を検索"><select id="user-sort" aria-label="参加者の並び順"><option value="comments">コメント順</option><option value="spoons">スプーン順</option><option value="hearts">ハート順</option><option value="entries">入室回数順</option></select></div><div class="table-wrap"><table><thead><tr><th>名前</th><th>コメント</th><th>入室</th><th>ハート</th><th>スプーン</th><th>サブスク</th></tr></thead><tbody id="users"></tbody></table></div><p class="hint">入室は通知を受信した回数です。検出した人の一覧には、退出した人も残ります。</p></section>
 <section class="card"><div class="section-title"><h2>公式ファンランキング</h2><button id="refresh-fans" type="button">取得する</button></div><ol id="fans"><li>取得するとここに表示します。</li></ol><p id="fans-info" class="hint">現在在室する人の上位30名です。利用には設定で機能を有効にしてください。権限の同意は受信開始時にまとめて取得します。</p></section>
 </div>
-<section id="attendance-slot"></section><section id="donations-slot"></section><details class="card participants-card" aria-labelledby="v-participants-heading">
-        <summary>参加者ごとの読み上げ音声</summary><div class="section-heading"><h2 id="v-participants-heading">参加者の声 <span id="v-participant-count" class="count-badge">0</span></h2><button id="v-refresh-room" type="button" class="text-button">更新</button></div>
-        <p id="v-room-hint" class="hint">ページから検出できた参加者を表示します。</p>
-        <div id="v-participants" class="participants"><p class="empty-state">参加者を確認しています…</p></div>
-        <div class="participant-footer"><p class="hint">候補の声より人数が多いと、同じ声を再利用します。</p><button id="v-reset-assignments" type="button" class="text-button">自動で割り当て直す</button></div>
-      </details>
+      <section id="attendance-slot"></section><section id="donations-slot"></section>
       <section id="profile-card" class="card"><div class="section-title"><h2>個人ステータス</h2><select id="profile-user" aria-label="ステータスを表示する参加者"><option value="">参加者を選択</option></select></div><p id="profile-hint" class="hint">一覧の名前を押すか、参加者を選択してください。チャットの /status では送信者自身の記録を確認できます。</p><div class="profile-metrics"><div><span>今回送ったスプーン</span><strong id="profile-spoons">—</strong></div><div><span>今回送ったハート</span><strong id="profile-hearts">—</strong></div><div><span>今回のコメント</span><strong id="profile-comments">—</strong></div><div><span>今回の入室</span><strong id="profile-entries">—</strong></div></div><p id="profile-total" class="profile-summary"></p><p id="profile-games" class="hint"></p><p id="profile-fortune" class="hint"></p><p class="hint">公式APIは同じDJの保存分、画面取得は選択した配信の読み取り分です。画面にIDがない場合は名前で照合するため、同名・改名により集計がずれることがあります。スプーンはギフトの数量、ハートは加算された個数です。購入額・残高・Spoon全体の生涯送信量は含みません。</p></section>
       
     </div>
 
     
 <div id="view-tools" class="view" aria-labelledby="tools-heading" hidden="">
-      <div class="page-title"><div><h1 id="tools-heading">配信ツール</h1><p class="page-description">質問の受付、チャット送信、投票、ゲームを操作します。</p></div></div>
+      <div class="page-title"><div><h1 id="tools-heading">機能</h1><p class="page-description">質問の受付、チャット送信、投票、ゲームなど、配信中に使う機能を操作します。</p></div></div>
 
 
       
       
 
       
-    <nav class="section-nav" aria-label="配信ツールの分類"><a href="#tools/requests" data-section-group="tools" data-section-link="requests">質問・参加URL</a><a href="#tools/chat" data-section-group="tools" data-section-link="chat">チャット・投票・抽選</a><a href="#tools/games" data-section-group="tools" data-section-link="games">ゲーム</a></nav>
+    <nav class="section-nav" aria-label="機能の分類"><a href="#tools/requests" data-section-group="tools" data-section-link="requests">質問・参加URL</a><a href="#tools/chat" data-section-group="tools" data-section-link="chat">チャット・投票・抽選</a><a href="#tools/games" data-section-group="tools" data-section-link="games">ゲーム</a></nav>
 <div data-section-group="tools" data-section-panel="requests" hidden=""><div id="request-inbox-slot"></div><div id="participation-slot"></div></div><div data-section-group="tools" data-section-panel="chat" hidden=""><section class="card"><div class="section-title"><h2>自動コメント</h2><button id="pause-automation" type="button">一時停止</button></div><p id="automation-status" class="result" role="status"></p><p class="hint">入室・ハート・スプーン・定期お知らせをまとめて一時停止できます。読み上げはそのまま使えます。</p><a href="#settings/automation" data-settings-target="automation">文面・送信条件を設定</a></section>
 <section class="card"><div class="section-title"><h2>ボットからチャット</h2><a href="#settings/goals" data-settings-target="goals">定型文を編集 →</a></div><label for="template-select" class="field-label">保存した定型文</label><select id="template-select"><option value="">定型文を選択</option></select><textarea id="chat" rows="3" maxlength="200" placeholder="送信する本文（200文字まで）" aria-label="送信する本文"></textarea><div class="section-title"><span id="chat-count" class="hint">0 / 200</span><button id="send-chat" type="button" class="primary">この配信に送信</button></div><p class="hint">ボット名で投稿します。チャット送信の許可が必要です。ここから送った /help はコマンドとして実行されません。</p></section>
 <section class="card"><h2>チャット投票</h2><label class="field" for="poll-question"><span>質問（60文字まで）</span><input id="poll-question" maxlength="60" placeholder="次は何をする？"></label>
@@ -70,9 +65,9 @@
 </div></div>
 <div id="view-settings" class="view" aria-labelledby="settings-heading" hidden="">
       <div class="page-title"><div><h1 id="settings-heading">設定</h1><p class="page-description">目的別に設定を変更し、画面下の「設定を保存」でまとめて反映します。</p></div><span id="prefs-state" class="muted">保存済み</span></div>
-      <section class="card" aria-labelledby="appearance-heading"><h2 id="appearance-heading">表示</h2><label class="field" for="theme-mode"><span>テーマ</span><select id="theme-mode" aria-describedby="theme-mode-help"><option value="system">システム</option><option value="light">ライト</option><option value="dark">ダーク</option></select></label><p id="theme-mode-help" class="hint">テーマは選択するとすぐに反映され、自動保存されます。</p></section>
-      <nav class="settings-tabs" aria-label="設定の分類"><button type="button" data-settings-tab="connection" aria-pressed="true">連携</button><button type="button" data-settings-tab="voice" aria-pressed="false">読み上げ</button><button type="button" data-settings-tab="automation" aria-pressed="false">自動コメント</button><button type="button" data-settings-tab="commands" aria-pressed="false">コマンド</button><button type="button" data-settings-tab="goals" aria-pressed="false">目標・定型文</button></nav>
+      <nav class="settings-tabs" aria-label="設定の分類"><button type="button" data-settings-tab="display" aria-pressed="false">画面</button><button type="button" data-settings-tab="connection" aria-pressed="true">連携</button><button type="button" data-settings-tab="voice" aria-pressed="false">読み上げ</button><button type="button" data-settings-tab="automation" aria-pressed="false">自動コメント</button><button type="button" data-settings-tab="commands" aria-pressed="false">コマンド</button><button type="button" data-settings-tab="goals" aria-pressed="false">目標・定型文</button></nav>
       <form id="v-settings-form" novalidate="">
+        <div data-settings-panel="display" hidden=""><section class="card" aria-labelledby="appearance-heading"><h2 id="appearance-heading">画面の表示</h2><label class="field" for="theme-mode"><span>テーマ</span><select id="theme-mode" aria-describedby="theme-mode-help"><option value="system">システム</option><option value="light">ライト</option><option value="dark">ダーク</option></select></label><p id="theme-mode-help" class="hint">テーマは選択するとすぐに反映され、自動保存されます。</p></section></div>
         <div data-settings-panel="connection">
 <section class="card" aria-labelledby="v-spoon-heading" hidden="">
           <div class="section-heading"><h2 id="v-spoon-heading">Spoon に接続</h2></div>
@@ -150,6 +145,12 @@
             <p class="hint">入室・ハートなどの通知は、同じ文でも届くたびに読み上げます。</p>
           </details>
         </section>
+<details class="card participants-card" aria-labelledby="v-participants-heading">
+        <summary>参加者ごとの読み上げ音声</summary><div class="section-heading"><h2 id="v-participants-heading">参加者の声 <span id="v-participant-count" class="count-badge">0</span></h2><button id="v-refresh-room" type="button" class="text-button">更新</button></div>
+        <p id="v-room-hint" class="hint">ページから検出できた参加者を表示します。</p>
+        <div id="v-participants" class="participants"><p class="empty-state">参加者を確認しています…</p></div>
+        <div class="participant-footer"><p class="hint">候補の声より人数が多いと、同じ声を再利用します。</p><button id="v-reset-assignments" type="button" class="text-button">自動で割り当て直す</button></div>
+      </details>
 <section class="card" aria-labelledby="v-command-speech-heading"><h2 id="v-command-speech-heading">コマンド返信の読み上げ</h2><label class="check-row"><input id="v-command-speech-weather" type="checkbox"><span>天気予報の返信を読み上げる（/天気・/weather）</span></label><label class="check-row"><input id="v-command-speech-other" type="checkbox"><span>その他のコマンド返信を読み上げる（/help・/stats など）</span></label><p class="hint">読み上げが有効なとき、選んだ返信を通知用の声で読みます。OFFでもチャットへの返信とログの保存は行います。変更後は設定を保存してください。</p></section>
 <p class="hint">読み上げる本文・通知・名前は、選択した音声APIに送信します。</p></div>
         <div data-settings-panel="automation" hidden=""><p class="hint">自動コメントは個別にON/OFFできます。設定を保存し、初回は「連携 → DJの連携設定を開く」からチャット送信を許可してください。送信状況は配信ツール → チャット・投票・抽選、送信内容・失敗は記録・分析 → 受信ログで確認できます。</p><section class="card" aria-labelledby="v-greeting-heading">

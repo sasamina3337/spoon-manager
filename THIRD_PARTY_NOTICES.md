@@ -20,7 +20,7 @@ Spoon Manager 本体の独自コードは [MIT License](LICENSE) で公開しま
 
 ## v2.8.0 のバイナリ配布で確認した条件
 
-v2.8.1 でも依存部品のバージョン・配布方法は同じです。以下のライセンス文書と NOTICE を引き続き同梱します。
+v2.8.2 でも依存部品のバージョン・配布方法は同じです。以下のライセンス文書と NOTICE を引き続き同梱します。
 
 - **nlohmann/json と cpp-httplib**: MIT の著作権表示・許諾文・免責文を保持します。nlohmann/json に同梱される Hedley などの著作権表示も `nlohmann-json-components.txt` に収録します。
 - **WebView2 SDK**: 取得した SDK の LICENSE.txt と NOTICE.txt をそのまま同梱します。ブラウザー本体は配布せず、[Microsoft の配布ガイド](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution) に従って Evergreen Runtime を事前条件にしています。
