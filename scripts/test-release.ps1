@@ -45,6 +45,9 @@ try {
 } finally { $zip.Dispose() }
 [IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $runPath)
 $portable = Join-Path $runPath $name
+foreach ($binary in @((Join-Path $portable 'SpoonManager.exe'), $installer)) {
+    if ([Diagnostics.FileVersionInfo]::GetVersionInfo($binary).ProductVersion -ne $version) { throw 'Release binary product version does not match package.json.' }
+}
 if ((Get-FileHash (Join-Path $portable 'cloudflared.exe')).Hash -ne '2493DBC168923BB3E59E5E7716F71DECED92992EEA9ACD6E9D74F84AC7751343') { throw 'Cloudflared checksum mismatch.' }
 $modules = Get-Content -Raw -Encoding UTF8 (Join-Path $portable 'licenses/cloudflared-dependencies.json') | ConvertFrom-Json
 if ($modules.Count -ne 66) { throw 'Incomplete Cloudflared license manifest.' }

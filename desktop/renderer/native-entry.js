@@ -11,7 +11,7 @@ const copy = value => structuredClone(value);
 const defaults = {
   heartGoal: 100, spoonGoal: 100,
   features: {fans: false, follow: false, chat: false, djFollow: false, donations: false},
-  commands: {enabled: true, cooldownSeconds: 10}, templates: []
+  commands: {enabled: true, cooldownSeconds: 10, enabledByName: {}}, templates: []
 };
 
 // Merge the original form's known fields into the full C++ document, retaining

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ChatCommands, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceListMessage} from '../desktop/renderer/background/chat-commands.js';
+import {ChatCommands, COMMAND_NAMES, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceListMessage} from '../desktop/renderer/background/chat-commands.js';
 
 test('commands require a whole slash-prefixed message; replies never trigger another command', () => {
   assert.deepEqual(parseCommand(' /VOICE  3 '), {name: 'voice', args: ['3']});
@@ -81,6 +81,29 @@ test('per-user and global cooldowns prevent floods while later requests work', a
   assert.equal(app.replies.length, 2);
   app.advance(10000); app.commands.accept(app.input('a')); await app.commands.chain;
   assert.equal(app.replies.length, 3);
+});
+
+test('individual OFF flags block every command without consuming other commands cooldowns', async () => {
+  const flags = Object.fromEntries(COMMAND_NAMES.map(name => [name, false]));
+  let calls = 0;
+  const app = fixture({getConfig: () => ({enabled: true, cooldownSeconds: 10, enabledByName: flags}), execute: async () => {calls++; return '応答';}});
+  for (const name of COMMAND_NAMES) app.commands.accept(app.input('a', '/' + name));
+  await app.commands.chain;
+  assert.equal(calls, 0); assert.equal(app.replies.length, 0); assert.equal(app.commands.pending, 0);
+  flags.dice = true;
+  app.commands.accept(app.input('a', '/dice')); await app.commands.chain;
+  assert.equal(calls, 1); assert.equal(app.replies.length, 1);
+});
+
+test('turning a command OFF cancels queued work and suppresses an in-flight reply', async () => {
+  let enabled = true, finish, calls = 0;
+  const app = fixture({getConfig: () => ({enabled: true, cooldownSeconds: 10, enabledByName: {help: enabled}}),
+    execute: () => {calls++; return new Promise(resolve => {finish = resolve;});}});
+  app.commands.accept(app.input()); enabled = false; await app.commands.chain;
+  assert.equal(calls, 0);
+  enabled = true; app.advance(11000); app.commands.accept(app.input()); await Promise.resolve();
+  enabled = false; finish('応答'); await app.commands.chain;
+  assert.equal(calls, 1); assert.equal(app.replies.length, 0);
 });
 
 test('disabling, aborting or changing rooms during async commands prevents a late reply', async () => {

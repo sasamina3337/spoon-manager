@@ -8,8 +8,8 @@ Spoon の公式APIでコメントを受信し、読み上げ、集計、質問�
 
 | 配布物 | 使い方 |
 | --- | --- |
-| `SpoonManager-2.8.0-win64-Setup.exe` | 1ファイルのインストーラー。実行してインストールします。 |
-| `SpoonManager-2.8.0-win64.zip` | 全体を展開し、フォルダー内の `SpoonManager.exe` を起動します。 |
+| `SpoonManager-2.8.1-win64-Setup.exe` | 1ファイルのインストーラー。実行してインストールします。 |
+| `SpoonManager-2.8.1-win64.zip` | 全体を展開し、フォルダー内の `SpoonManager.exe` を起動します。 |
 | `SHA256SUMS.txt` | ダウンロードしたインストーラーと ZIP の SHA-256 一覧です。 |
 
 どちらも [Microsoft Edge WebView2 Evergreen Runtime（x64）](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) が必要です。インストーラーは未導入なら案内して終了し、ランタイムの自動インストールは行いません。
@@ -46,7 +46,7 @@ PowerShell で実行します。
 .\spoon.ps1 start --debug
 ~~~
 
-既定は Release です。build はアプリとインストーラーを作成し、dist/spoon-manager/ に配布ファイルを配置します。実行ファイルは SpoonManager.exe、インストーラーは dist/installers/SpoonManager-2.8.0-win64-Setup.exe です。実行ファイルと ui/、ランタイム DLL を一緒に配置してください。
+既定は Release です。build はアプリとインストーラーを作成し、dist/spoon-manager/ に配布ファイルを配置します。実行ファイルは SpoonManager.exe、インストーラーは dist/installers/SpoonManager-2.8.1-win64-Setup.exe です。実行ファイルと ui/、ランタイム DLL を一緒に配置してください。
 
 JavaScript の画面ロジックをテストするときだけ Node.js が必要です。
 
@@ -57,9 +57,11 @@ npm run test:ui
 
 アプリのビルド・起動にはNode.jsは不要です。一時参加URLの公開に使うCloudflareの実行ファイルは、固定バージョンとSHA-256を検証して同梱します。
 
-Release 構成では、インストーラーに使用した同じ配布用ファイルから `dist/releases/SpoonManager-2.8.0-win64.zip` も作成します。第三者のライセンスと NOTICE も両方に同梱します。
+Release 構成では、インストーラーに使用した同じ配布用ファイルから `dist/releases/SpoonManager-2.8.1-win64.zip` も作成します。第三者のライセンスと NOTICE も両方に同梱します。
 
 ## 機能と保存データ
+
+テーマは「設定 → 表示」で選択でき、即時反映・自動保存されます。「設定 → コマンド」では各コマンドを個別に ON／OFF にして「設定を保存」で反映できます。OFF のコマンドは処理と返信を停止し、ヘルプ一覧にも保存済みの状態を表示します。
 
 受信開始時に、すべてのSpoon API権限の同意をまとめて確認します。既存の同意に不足がある場合は同意画面を開き、完了後に受信を自動開始します。開発者センターにも全権限を登録してください。必要な権限の一覧は「設定 → 連携 → 開発者センターに登録する権限」に表示します。各機能のON/OFFは同意と独立して設定できます。
 

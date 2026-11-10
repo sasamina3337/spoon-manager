@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createNativeAdapter} from '../desktop/renderer/native-entry.js';
 import {DEFAULT_SETTINGS} from '../desktop/renderer/shared/settings.js';
 import {SPOON_SCOPES} from '../desktop/renderer/shared/spoon-permissions.js';
-import {parseCommand} from '../desktop/renderer/background/chat-commands.js';
+import {COMMAND_NAMES, parseCommand} from '../desktop/renderer/background/chat-commands.js';
 
 function fixture() {
   let clock = 100000;
@@ -40,6 +40,36 @@ test('request intake and status changes persist, duplicate events are not proces
   const response=await f.adapter.message({type:'MANAGER_REQUESTS',sessionKey:f.key,action:'status',id:1,status:'done'});
   assert.equal(response.session.requests.items[0].status,'done');
   assert.equal((await f.adapter.message({type:'MANAGER_REQUESTS',sessionKey:f.key,action:'status',id:1,status:'bad'})).ok,false);
+});
+
+test('saved individual flags block commands including request intake, voting and participation; ON resumes new events', async () => {
+  const f = fixture();
+  const flags = Object.fromEntries(COMMAND_NAMES.map(name => [name, false]));
+  const saved = await f.adapter.message({type: 'SAVE_MANAGER_PREFS', preferences: {commands: {enabledByName: flags}}});
+  assert.equal(saved.ok, true);
+  assert.deepEqual((await f.adapter.manager()).preferences.commands.enabledByName, flags);
+  await f.adapter.message({type: 'MANAGER_REQUESTS', sessionKey: f.key, action: '受付', open: true});
+  // Open a poll through the DJ controls; command flags apply to chat commands.
+  await f.adapter.message({type: 'MANAGER_POLL', sessionKey: f.key, action: 'start', question: 'どちら？', options: ['A', 'B']});
+  const before = f.calls.length;
+  for (const name of COMMAND_NAMES) f.event('/' + name);
+  for (const text of ['/質問 本文', '/question body', '/リクエスト 本文', '/request body', '/vote 1', '/参加 abcdef1234']) f.event(text);
+  await f.adapter.runtime.tick(); await f.adapter.runtime.commands.chain; await f.adapter.runtime.outbox;
+  assert.equal(f.raw.runtime.sessions[f.key].requests.items.length, 0);
+  assert.deepEqual(f.raw.runtime.sessions[f.key].poll.votes, {});
+  assert.deepEqual(f.raw.runtime.profiles, {});
+  assert.equal(f.calls.slice(before).some(call => call.operation === 'send-generated' || call.operation === 'weather' || (call.operation === 'participation' && call.input.action === 'link')), false);
+  await f.adapter.message({type: 'SAVE_MANAGER_PREFS', preferences: {commands: {enabledByName: {question: true, vote: true, 参加: true, dice: true}}}});
+  for (const text of ['/question new body', '/vote 2', '/参加 abcdef1234', '/dice']) {
+    f.advance(); f.event(text);
+    await f.adapter.runtime.tick(); await f.adapter.runtime.commands.chain; await f.adapter.runtime.outbox;
+  }
+  assert.equal(f.raw.runtime.sessions[f.key].requests.items.length, 1);
+  assert.equal(f.raw.runtime.sessions[f.key].requests.items[0].text, 'new body');
+  assert.equal(f.raw.runtime.sessions[f.key].poll.votes[f.user.id], 1);
+  assert.ok(f.calls.some(call => call.operation === 'participation' && call.input.action === 'link'));
+  assert.equal(f.raw.runtime.profiles[f.user.id].counters.diceRolls, 1);
+  assert.equal(f.raw.manager.preferences.commands.enabledByName.質問, false);
 });
 test('polls support starting, changing a vote and closing with persisted results', async () => {
   const f=fixture();

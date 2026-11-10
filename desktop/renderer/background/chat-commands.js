@@ -33,6 +33,13 @@ export const COMMANDS = [
   {name: 'goal', usage: '/goal heart|spoon 数値', description: '目標を変更（0で無効）', audience: 'DJのみ'}
 ];
 
+export const COMMAND_NAMES = [...new Set(COMMANDS.map(command => command.name))];
+
+// Missing flags keep existing installations' commands enabled.
+export function isCommandEnabled(config, name) {
+  return config?.enabledByName?.[name] !== false;
+}
+
 export const HELP_MESSAGE = 'コマンド\n/stats 集計 /me 自分\n/goal 進捗 /voice 声 /voice list 音声一覧\n/天気 東京 明日\n/dice /omikuji /janken /guess /game\n/reversi /shogi\n/vote 投票 /rank 順位\n/質問 内容 /リクエスト 内容\n/help request 受付\n/help dj DJ専用';
 
 export function helpMessage(args, cooldown) {
@@ -119,6 +126,7 @@ export class ChatCommands {
     const config = this.getConfig();
     const command = input.event.type === 'comment' && parseCommand(input.event.text);
     if (!config.enabled || !command) return false;
+    if (!isCommandEnabled(config, command.name)) return true;
     const now = this.now(), id = input.event.user?.id;
     if (!id || input.signal?.aborted || !this.isCurrent(input)) return true;
     if (now < this.blockedUntil) return true;
@@ -132,7 +140,7 @@ export class ChatCommands {
     const job = {...input, command, createdAt: now, signal: input.signal ? AbortSignal.any([input.signal, this.abort.signal]) : this.abort.signal};
     this.pending++;
     this.chain = this.chain.then(async () => {
-      const valid = () => !job.signal.aborted && this.getConfig().enabled && this.isCurrent(job) && this.now() >= this.blockedUntil && this.now() - job.createdAt < 15000;
+      const valid = () => !job.signal.aborted && this.getConfig().enabled && isCommandEnabled(this.getConfig(), command.name) && this.isCurrent(job) && this.now() >= this.blockedUntil && this.now() - job.createdAt < 15000;
       if (!valid()) return;
       const delay = Math.max(0, 3000 - (this.now() - this.lastSent));
       if (delay) await this.wait(delay, job.signal);

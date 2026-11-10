@@ -1,6 +1,7 @@
 import {initializeWorkspace} from '../shared/workspace.js';
 import {csv, drawListeners} from '../shared/manager-utils.js';
-import {COMMANDS} from '../background/chat-commands.js';
+import {COMMANDS, isCommandEnabled} from '../background/chat-commands.js';
+import {createCommandSettings} from './command-settings.js';
 import {$, send, notice, node, time, download, poll} from '../shared/ui.js';
 import {settingsUI} from './settings.js';
 import {renderDashboard} from './dashboard.js';
@@ -55,6 +56,7 @@ async function setSession(key) {
 }
 
 const {showSettings} = initializeWorkspace({onSettingsChange: name => {settingView = name;}});
+const commandSettings = createCommandSettings($('command-toggles'), {onChange: markDirty});
 
 function markDirty() {
   prefsDirty = true; prefsRevision++; updateSaveBar();
@@ -112,6 +114,7 @@ function renderPreferences() {
   $('heart-goal').value = prefs.heartGoal; $('spoon-goal').value = prefs.spoonGoal;
   $('commands-enabled').checked = prefs.commands.enabled;
   $('commands-cooldown').value = prefs.commands.cooldownSeconds;
+  commandSettings.render(prefs.commands);
   for (const feature of features) $('feature-' + feature).checked = prefs.features[feature];
   $('templates').replaceChildren(...prefs.templates.map(templateRow));
   const previous = $('template-select').value;
@@ -247,6 +250,9 @@ function apply(result) {
   $('setup-guide').hidden = Boolean(state.activeKey) || state.spoonStatus?.receiving;
   $('setup-text').textContent = state.spoonStatus?.authorized ? 'ヘッダーの「受信開始」を押すとコメントを取得します。読み上げの確認は「設定 → 読み上げ」で行えます。' : 'ヘッダーの「受信開始」からSpoonにログインしてください。連携後、自動で受信を開始します。';
   $('commands-badge').textContent = state.preferences.commands.enabled ? '応答する設定' : '無効';
+  for (const cell of document.querySelectorAll('[data-command-enabled]')) {
+    cell.textContent = isCommandEnabled(state.preferences.commands, cell.dataset.commandEnabled) ? 'ON' : 'OFF';
+  }
   $('command-status').textContent = !state.preferences.commands.enabled ? '管理設定でコマンド応答を有効にできます。'
     : `${state.commandStatus?.message || 'コマンドを待っています。'} 同じ人の応答間隔：${state.preferences.commands.cooldownSeconds}秒（将棋6秒・リバーシ3秒）。将棋盤は上下2通を3秒間隔で表示します。応答にはチャット送信の追加同意が必要です。`;
   renderSessions(); renderPreferences(); renderCounters(); renderUsers(); renderProfile(); renderEvents();
@@ -295,7 +301,7 @@ $('add-template').addEventListener('click', () => {
 });
 function collectPreferences() {
   return {heartGoal: Number($('heart-goal').value), spoonGoal: Number($('spoon-goal').value),
-    commands: {enabled: $('commands-enabled').checked, cooldownSeconds: Number($('commands-cooldown').value)},
+    commands: {enabled: $('commands-enabled').checked, cooldownSeconds: Number($('commands-cooldown').value), enabledByName: commandSettings.collect()},
     features: Object.fromEntries(features.map(feature => [feature, $('feature-' + feature).checked])),
     templates: [...$('templates').children].map(row => ({label: row.querySelector('input').value, text: row.querySelector('textarea').value}))};
 }
@@ -369,7 +375,8 @@ async function initialize() {
   document.documentElement.dataset.surface = 'tab';
   $('command-list').replaceChildren(...COMMANDS.map(command => {
     const row = node('tr'); const usage = node('td'); usage.append(node('code', command.usage));
-    row.append(usage, node('td', command.description), node('td', command.audience)); return row;
+    const enabled = node('td'); enabled.dataset.commandEnabled = command.name;
+    row.append(usage, node('td', command.description), node('td', command.audience), enabled); return row;
   }));
   try { apply(await send('GET_MANAGER_STATE')); }
   catch (error) { notice(error.message, true); }

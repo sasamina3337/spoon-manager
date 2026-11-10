@@ -68,6 +68,14 @@ body { min-width: 0; }
 .view h1:focus { outline: none; }
 .card { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
 .card h2 { font-size: 15px; margin-bottom: 12px; }
+.command-toggle-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; margin-top: 16px; }
+.command-toggle { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.command-toggle input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--accent); }
+.command-toggle > span:first-of-type { flex: 1; min-width: 0; }
+.command-toggle code { display: inline-block; margin-bottom: 4px; }
+.command-toggle small { display: block; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.command-toggle-state { color: var(--muted); font-size: 12px; font-weight: 700; }
+.command-toggle input:checked ~ .command-toggle-state { color: var(--accent); }
 .section-nav, .settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; padding: 0 0 12px; border-bottom: 1px solid var(--line); }
 .section-nav a, .settings-tabs button { padding: 7px 12px; border: 1px solid transparent; border-radius: 5px; color: var(--muted); text-decoration: none; font-size: 13px; background: transparent; font-weight: 500; }
 .section-nav a:hover, .settings-tabs button:hover { background: #eaeef1; color: var(--ink); }

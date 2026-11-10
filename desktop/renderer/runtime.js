@@ -1,4 +1,4 @@
-import {ChatCommands, parseCommand, helpMessage, voiceListMessage, chatText} from './background/chat-commands.js';
+import {ChatCommands, parseCommand, helpMessage, voiceListMessage, chatText, isCommandEnabled} from './background/chat-commands.js';
 import {requestSubmission, restoreRequests, setRequestsOpen, submitRequest, updateRequestStatus} from './background/requests.js';
 import {executeBoard, boardSummary} from './background/board-games.js';
 import {newReversi, newShogi, moveReversi, moveShogi, SHOGI_PIECES} from './background/board-rules.js';
@@ -63,8 +63,8 @@ export class NativeRuntime {
     this.automation = {paused: false, sent: 0, failed: 0, message: '有効にした自動コメントを待っています。'};
     this.commands = new ChatCommands({getConfig: () => ({...obj(this.raw.manager?.preferences?.commands), enabled: this.raw.manager?.preferences?.features?.chat === true && this.raw.manager?.preferences?.commands?.enabled === true}),
       isCurrent: job => this.raw._native?.receiving && this.raw._native?.activeKey === job.key,
-      execute: job => this.change(job.key, async (session, runtime, raw) => this.execute(job, session, runtime, raw)),
-      reply: (job, text) => this.send(job.key, text, 'bot', ['weather', '天気'].includes(job.command.name) ? 'weather' : 'other'), now, wait: (ms, signal) => this.wait(ms, signal)});
+      execute: (job, valid) => this.change(job.key, async (session, runtime, raw) => valid() ? this.execute(job, session, runtime, raw) : null),
+      reply: (job, text) => this.send(job.key, text, 'bot', ['weather', '天気'].includes(job.command.name) ? 'weather' : 'other', job.command.name), now, wait: (ms, signal) => this.wait(ms, signal)});
   }
   wait(ms, signal) {
     if (ms <= 0 || signal?.aborted) return Promise.resolve();
@@ -203,7 +203,7 @@ export class NativeRuntime {
     }
     throw new Error('操作を確認してください。');
   }
-  send(key, text, kind = 'automatic', speechKind = '') {
+  send(key, text, kind = 'automatic', speechKind = '', commandName = '') {
     if (this.queued >= 16) return Promise.reject(new Error('送信待ちが多いため応答を省略しました。'));
     this.queued++;
     const created = this.now(), generation = this.generation;
@@ -213,6 +213,7 @@ export class NativeRuntime {
       if (delay) await this.wait(delay);
       if (generation !== this.generation) return;
       const raw = await this.snapshot(true); this.current(raw, key);
+      if (commandName && (!isCommandEnabled(raw.manager?.preferences?.commands, commandName) || (kind === 'bot' && !raw.manager?.preferences?.commands?.enabled))) return;
       if (!raw.manager?.preferences?.features?.chat) throw new Error('設定の「チャット送信」を有効にし、DJの同意を取得してください。');
       if (kind === 'automatic' && raw.runtime?.sessions?.[key]?.automationPaused) return;
       if (this.now() - created > 60000) return;
@@ -239,20 +240,22 @@ export class NativeRuntime {
         for (const event of pending) {
           seen.add(event.id);
           if (event.type === 'comment' && event.user) {
+            const command = parseCommand(event.text);
+            if (command && !isCommandEnabled(current.manager?.preferences?.commands, command.name)) continue;
             const vote = /^\/vote\s+([1-5])$/i.exec(String(event.text).trim());
             if (vote && saved.poll?.open && Number(vote[1]) <= saved.poll.options.length) {
               saved.poll.votes[event.user.id] = Number(vote[1]) - 1; continue;
             }
             const link = /^\/参加\s+([a-f0-9]{10})$/i.exec(String(event.text).trim());
             if (link) {
-              try {await this.call('participation', {action: 'link', payload: {code: link[1], user: event.user}}); if (current.manager?.preferences?.features?.chat) automatic.push(`${event.user.name}さん、参加ページと連携しました。`);}
-              catch (error) {if (current.manager?.preferences?.features?.chat) automatic.push(error.message);}
+              try {await this.call('participation', {action: 'link', payload: {code: link[1], user: event.user}}); if (current.manager?.preferences?.features?.chat) automatic.push({text: `${event.user.name}さん、参加ページと連携しました。`, commandName: command.name});}
+              catch (error) {if (current.manager?.preferences?.features?.chat) automatic.push({text: error.message, commandName: command.name});}
               continue;
             }
             const submission = requestSubmission(event.text);
             if (submission) {
               const response = submitRequest(saved, event, submission);
-              if (current.manager?.preferences?.features?.chat) automatic.push(response);
+              if (current.manager?.preferences?.features?.chat) automatic.push({text: response, commandName: command.name});
             } else commandJobs.push({event, key});
           }
           if (saved.automationPaused || event.isDj || !event.user) continue;
@@ -268,7 +271,7 @@ export class NativeRuntime {
         }
       });} catch(error) {for (const event of pending) seen.delete(event.id); throw error;}
       if (seen.size > 12000) this.seen.set(key, new Set(session.events.map(event => event.id)));
-      for (const message of automatic) void this.send(key, message).catch(() => {});
+      for (const message of automatic) void this.send(key, typeof message === 'string' ? message : message.text, 'automatic', '', message.commandName || '').catch(() => {});
       for (const job of commandJobs) this.commands.accept(job);
       if (this.portalStatus.running) await this.syncPortal(await this.snapshot(true));
       this.automation.paused = session.automationPaused === true;
@@ -282,6 +285,7 @@ export class NativeRuntime {
   }
   async execute(job, session, runtime, raw) {
     const {name, args} = job.command, event = job.event, user = event.user;
+    if (!isCommandEnabled(raw.manager?.preferences?.commands, name)) return null;
     const profile = runtime.profiles[user.id] ||= {name: user.name, counters: {}};
     profile.name = user.name; profile.updatedAt = this.now(); profile.counters = {...Object.fromEntries(counterNames.map(key => [key, 0])), ...profile.counters};
     const djOnly = () => {if (!event.isDj) throw new Error('この操作はDJ専用です。');};
