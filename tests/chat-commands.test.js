@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ChatCommands, COMMAND_NAMES, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceListMessage, resolveVoice} from '../desktop/renderer/background/chat-commands.js';
+import {ChatCommands, COMMAND_NAMES, HELP_MESSAGE, helpMessage, parseCommand, chatText, botMessage, voiceChoices, voiceListMessage, resolveVoice} from '../desktop/renderer/background/chat-commands.js';
 
 test('commands require a whole slash-prefixed message; replies never trigger another command', () => {
   assert.deepEqual(parseCommand(' /VOICE  3 '), {name: 'voice', args: ['3']});
@@ -37,7 +37,7 @@ test('voice list pages include every ID, full name and style within the chat lim
     const reply = botMessage(voiceListMessage(voices, String(page)));
     assert.ok(reply.length <= 200);
     assert.ok(reply.includes(`音声一覧 ${page}/${total}（全30件）`));
-    assert.ok(reply.includes('変更: /voice ID・名前'));
+    assert.ok(reply.includes('変更: /voice 番号・名前'));
     assert.equal(reply.includes(`次: /voice list ${page + 1}`), page < total);
     assert.equal(parseCommand(reply), null);
     entries.push(...reply.split('\n').filter(line => /^\d+: /.test(line)));
@@ -54,11 +54,55 @@ test('voice list handles invalid pages, empty catalogs and unusually long Unicod
   assert.ok(first.length <= 200);
   assert.match(first, /9007199254740991: /);
   assert.match(first, /…/);
-  assert.ok(first.endsWith('次: /voice list 2'));
-  const last = botMessage(voiceListMessage(voices, '2'));
-  assert.ok(last.length <= 200);
-  assert.match(last, /0: 次の声（ノーマル）/);
-  assert.ok(last.endsWith('変更: /voice ID・名前'));
+  assert.match(first, /0: 次の声（ノーマル）/);
+  assert.ok(first.endsWith('変更: /voice 番号・名前'));
+  assert.equal(first.split('\n').length, 4);
+  assert.equal(first.isWellFormed(), true);
+});
+
+test('a large COEIROINK catalog lists several selectable short codes per chat message', async () => {
+  const voices = Array.from({length: 155}, (_, id) => ({
+    id: `coeiroink:292ea286-3d5f-4fcc-957c-66462a6a9d08:${id}`,
+    name: `COEIROINK:音声キャラクター${id}（ノーマル）`
+  }));
+  const app = fixture({execute: async job => voiceListMessage(voices, job.command.args[1])});
+  app.commands.accept(app.input('a', '/voice list')); await app.commands.chain;
+  const first = app.replies[0];
+  const total = Number(/音声一覧 1\/(\d+)/.exec(first)[1]);
+  assert.ok(total < 58);
+  const entries = [];
+  for (let page = 1; page <= total; page++) {
+    const reply = botMessage(voiceListMessage(voices, String(page)));
+    assert.ok(reply.length <= 200);
+    assert.doesNotMatch(reply, /coeiroink:|292ea286/i);
+    const rows = reply.split('\n').filter(line => /^C\d+: /.test(line));
+    if (page < total) assert.ok(rows.length >= 3);
+    entries.push(...rows);
+  }
+  assert.equal(entries.length, voices.length);
+  for (const [index, row] of entries.entries()) assert.equal(resolveVoice(voices, row.split(':')[0]).voice.id, voices[index].id);
+});
+
+test('short codes distinguish engines and duplicate style IDs without changing persisted IDs', () => {
+  const first = {id: 'coeiroink:11111111-1111-4111-8111-111111111111:47', name: 'COEIROINK:一人目（のーまる）'};
+  const second = {id: 'coeiroink:22222222-2222-4222-8222-222222222222:47', name: 'COEIROINK:二人目（ささやき）'};
+  const voices = [{id: 47, name: 'VOICEVOX:別の声（ノーマル）'}, second, first];
+  assert.equal(resolveVoice(voices, '47').voice.id, 47);
+  assert.equal(resolveVoice(voices, 'V47').voice.id, 47);
+  assert.equal(resolveVoice(voices, 'C47').voice, undefined);
+  assert.match(resolveVoice(voices, 'C47').message, /C47-1: 一人目/);
+  assert.match(resolveVoice(voices, 'C47').message, /C47-2: 二人目/);
+  for (const catalog of [voices, [...voices].reverse()]) {
+    assert.equal(resolveVoice(catalog, 'Ｃ４７－１').voice.id, first.id);
+    assert.equal(resolveVoice(catalog, 'c47-2').voice.id, second.id);
+    assert.equal(resolveVoice(catalog, second.id).voice.id, second.id);
+    assert.deepEqual(voiceChoices(catalog).find(choice => choice.voice.id === first.id).code, 'C47-1');
+  }
+  assert.match(resolveVoice(voices, 'C47-1', [first.id]).message, /通知専用/);
+  const list = voiceListMessage(voices, '1', [first.id]);
+  assert.doesNotMatch(list, /C47-1/);
+  assert.match(list, /C47-2: 二人目/);
+  assert.match(list, /全2件/);
 });
 
 test('voice names select a normal style while full names, spaced styles and numeric IDs select the requested voice', () => {

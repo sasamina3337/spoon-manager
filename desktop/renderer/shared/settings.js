@@ -1,3 +1,4 @@
+import {BUILTIN_VOICES, builtinVoiceAllowed, additionalVoicesAccepted} from './builtin-voices.js';
 // Offline fallback only; the provider's /speakers response takes precedence.
 export const LEGACY_VOICES = [
   {id: 0, name: '四国めたん（あまあま）'},
@@ -12,18 +13,46 @@ export const LEGACY_VOICES = [
   {id: 13, name: '青山龍星（ノーマル）'}
 ];
 
-// Style IDs of the same VOICEVOX character still sound alike; reserve the whole character.
+export function isCoeiroinkVoice(id) {
+  return typeof id === 'string' && /^coeiroink:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}:(0|[1-9]\d{0,9})$/.test(id) && Number(id.split(':')[2]) <= 2147483647;
+}
+
+export function voiceId(value) {
+  return isCoeiroinkVoice(value) ? value : Number(value);
+}
+
+export function isVoiceId(id) {
+  return (Number.isSafeInteger(id) && id >= 0) || isCoeiroinkVoice(id);
+}
+
+export function voiceEnabled(id, settings) {
+  return isVoiceId(id) && (isCoeiroinkVoice(id) ? settings.coeiroinkEnabled === true || settings.coeiroinkDirectEnabled === true :
+    settings.provider !== 'builtin' || BUILTIN_VOICES.some(voice => voice.id === id && builtinVoiceAllowed(voice, settings)));
+}
+
+// Reserve all styles of the notification character within its own engine.
 export function notificationVoiceIds(voices, speaker) {
   const character = name => String(name).normalize('NFKC').replace(/\s*\([^()]*\)\s*$/, '').trim();
   const selected = voices.find(voice => voice.id === speaker);
-  return voices.filter(voice => voice.id === speaker || (selected && character(voice.name) === character(selected.name))).map(voice => voice.id);
+  const identity = voice => isCoeiroinkVoice(voice.id) ? voice.id.split(':').slice(0, 2).join(':') : character(voice.name);
+  const selectedIdentity = isCoeiroinkVoice(speaker) ? speaker.split(':').slice(0, 2).join(':') : selected && identity(selected);
+  return voices.filter(voice => voice.id === speaker || (selectedIdentity && identity(voice) === selectedIdentity)).map(voice => voice.id);
 }
 
 export const DEFAULT_SETTINGS = {
   schemaVersion: 1,
-  provider: 'legacy',
+  provider: 'builtin',
+  voiceTermsAccepted: '',
+  autoVoiceCredits: true,
+  avoidRestrictedVoices: true,
+  additionalVoiceTermsAccepted: '',
+  additionalVoiceUse: '',
   apiKey: '',
   engineUrl: 'http://127.0.0.1:50021',
+  coeiroinkEnabled: false,
+  coeiroinkUrl: 'http://127.0.0.1:50132',
+  coeiroinkDirectEnabled: false,
+  coeiroinkDirectUrl: 'http://127.0.0.1:50032',
   systemSpeaker: 0,
   commentSpeakers: LEGACY_VOICES.filter(voice => !notificationVoiceIds(LEGACY_VOICES, 0).includes(voice.id)).map(voice => voice.id),
   speed: 1,
@@ -94,7 +123,7 @@ export function normalizeAutomation(input, fallback, {announcement = false} = {}
 }
 
 export function needsAutomaticChat(settings) {
-  return Boolean(settings.autoGreeting?.enabled || settings.autoReplies?.heart?.enabled || settings.autoReplies?.spoon?.enabled || settings.announcements?.enabled);
+  return Boolean((settings.enabled !== false && settings.autoVoiceCredits !== false) || settings.autoGreeting?.enabled || settings.autoReplies?.heart?.enabled || settings.autoReplies?.spoon?.enabled || settings.announcements?.enabled);
 }
 
 export function automaticText(template, {name = '', amount = '', title = ''} = {}) {
@@ -109,20 +138,33 @@ export function automaticText(template, {name = '', amount = '', title = ''} = {
 
 export function normalizeSettings(input = {}) {
   const settings = {...DEFAULT_SETTINGS, ...input};
-  if (!['legacy', 'engine'].includes(settings.provider)) throw new Error('未対応の音声APIです。');
+  if (settings.coeiroinkEnabled === true && settings.coeiroinkDirectEnabled === true) throw new Error('COEIROINKのブリッジ接続と直接API接続は同時にONにできません。');
+  if (!['legacy', 'engine', 'builtin'].includes(settings.provider)) throw new Error('未対応の音声APIです。');
   if (!['dom', 'api'].includes(settings.spoonSource)) throw new Error('未対応のSpoon取得方法です。');
   let commentSpeakers = [...new Set((Array.isArray(settings.commentSpeakers) ? settings.commentSpeakers : [])
-    .map(Number).filter(id => Number.isSafeInteger(id) && id >= 0))];
+    .map(voiceId).filter(isVoiceId))];
   if (!commentSpeakers.length) throw new Error('コメントに使う声を1つ以上選んでください。');
-  const systemSpeaker = Math.trunc(finite(settings.systemSpeaker, 0, 0, Number.MAX_SAFE_INTEGER));
-  const reserved = notificationVoiceIds(LEGACY_VOICES, systemSpeaker);
-  commentSpeakers = commentSpeakers.filter(id => id !== systemSpeaker && !reserved.includes(id));
-  if (!commentSpeakers.length) commentSpeakers = LEGACY_VOICES.filter(voice => voice.id !== systemSpeaker && !reserved.includes(voice.id)).map(voice => voice.id);
+  const requestedSpeaker = isCoeiroinkVoice(settings.systemSpeaker) ? settings.systemSpeaker : Math.trunc(finite(settings.systemSpeaker, 0, 0, Number.MAX_SAFE_INTEGER));
+  const systemSpeaker = settings.provider === 'builtin' && !voiceEnabled(requestedSpeaker, settings) ? DEFAULT_SETTINGS.systemSpeaker : requestedSpeaker;
+  const catalog = settings.provider === 'builtin' ? BUILTIN_VOICES.filter(voice => builtinVoiceAllowed(voice, settings)) : LEGACY_VOICES;
+  const reserved = notificationVoiceIds(catalog, systemSpeaker);
+  commentSpeakers = commentSpeakers.filter(id => id !== systemSpeaker && !reserved.includes(id) &&
+    (settings.provider !== 'builtin' || isCoeiroinkVoice(id) || catalog.some(voice => voice.id === id)));
+  if (!commentSpeakers.length) commentSpeakers = catalog.filter(voice => voice.id !== systemSpeaker && !reserved.includes(voice.id)).map(voice => voice.id);
   return {
     schemaVersion: 1,
     provider: settings.provider,
+    voiceTermsAccepted: typeof settings.voiceTermsAccepted === 'string' ? settings.voiceTermsAccepted : '',
+    autoVoiceCredits: settings.autoVoiceCredits !== false,
+    avoidRestrictedVoices: !additionalVoicesAccepted(settings),
+    additionalVoiceTermsAccepted: additionalVoicesAccepted(settings) ? settings.additionalVoiceTermsAccepted : '',
+    additionalVoiceUse: additionalVoicesAccepted(settings) ? settings.additionalVoiceUse : '',
     apiKey: String(settings.apiKey ?? '').trim(),
     engineUrl: normalizeEngineUrl(settings.engineUrl),
+    coeiroinkEnabled: settings.coeiroinkEnabled === true,
+    coeiroinkUrl: settings.coeiroinkEnabled === true ? normalizeEngineUrl(settings.coeiroinkUrl) : String(settings.coeiroinkUrl ?? DEFAULT_SETTINGS.coeiroinkUrl),
+    coeiroinkDirectEnabled: settings.coeiroinkDirectEnabled === true,
+    coeiroinkDirectUrl: settings.coeiroinkDirectEnabled === true ? normalizeEngineUrl(settings.coeiroinkDirectUrl) : String(settings.coeiroinkDirectUrl ?? DEFAULT_SETTINGS.coeiroinkDirectUrl),
     systemSpeaker,
     commentSpeakers,
     speed: finite(settings.speed, 1, 0.5, 2),

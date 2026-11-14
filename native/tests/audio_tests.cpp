@@ -282,6 +282,70 @@ void cancel_before_fetch() {
     require(audio.synthesize("new job after stop", settings) == test_wave(), "stop() canceled a future job");
 }
 
+void coeiroink_direct_routing() {
+    Loopback primary, direct;
+    Recording primary_requests, direct_requests;
+    install_success(primary, primary_requests);
+    direct.server.Post("/api/v1/synthesis", [&](const auto& request, auto& response) {
+        direct_requests.add(request); response.set_content(test_wave(), "audio/wav");
+    });
+    primary.start(); direct.start();
+    spoon::Audio audio;
+    auto settings = engine_settings(primary);
+    settings["coeiroinkDirectEnabled"] = true;
+    settings["coeiroinkDirectUrl"] = direct.origin + "/api/";
+    settings["systemSpeaker"] = "coeiroink:cb11bdbd-78fc-4f16-b528-a400bae1782d:90";
+    settings["provider"] = "legacy"; settings["apiKey"] = "";
+    require(audio.synthesize("Direct + 日本語", settings) == test_wave(), "Direct COEIROINK synthesis failed");
+    require(primary_requests.get().empty(), "Direct COEIROINK reached the VOICEVOX engine");
+    const auto seen = direct_requests.get();
+    require(seen.size() == 1 && seen[0].target == "/api/v1/synthesis" && seen[0].content_type == "application/json", "Direct API used the wrong endpoint or format");
+    const auto body = Json::parse(seen[0].body);
+    require(body["speakerUuid"] == "cb11bdbd-78fc-4f16-b528-a400bae1782d" && body["styleId"] == 90 && body["text"] == "Direct + 日本語", "Direct API lost the UUID, style or text");
+    require(body["speedScale"] == 1.4 && body["volumeScale"] == 1.0 && body["outputSamplingRate"] == 44100, "Direct API speed/volume/sample rate was incorrect");
+    settings["coeiroinkEnabled"] = true;
+    expect_error([&] { audio.synthesize("mutually exclusive", settings); }, 400);
+    require(direct_requests.get().size() == 1, "Conflicting modes reached the API");
+}
+
+void coeiroink_bridge_routing() {
+    Loopback primary, bridge;
+    Recording primary_requests, bridge_requests;
+    install_success(primary, primary_requests);
+    install_success(bridge, bridge_requests);
+    primary.start(); bridge.start();
+    spoon::Audio audio;
+    auto settings = engine_settings(primary);
+    settings["coeiroinkEnabled"] = true;
+    settings["coeiroinkUrl"] = bridge.origin + "/api/";
+    settings["systemSpeaker"] = "coeiroink:cb11bdbd-78fc-4f16-b528-a400bae1782d:90";
+    require(audio.synthesize("bridge", settings) == test_wave(), "Bridge synthesis failed");
+    require(primary_requests.get().empty(), "COEIROINK request reached the primary engine");
+    const auto seen = bridge_requests.get();
+    require(seen.size() == 2 && seen[0].speaker == "90" && seen[1].target == "/api/synthesis?speaker=90", "Bridge style was not routed correctly");
+    require(Json::parse(seen[1].body)["speedScale"] == 1.4, "Bridge speed setting was lost");
+    settings["provider"] = "legacy"; settings["apiKey"] = "";
+    require(audio.synthesize("bridge without hosted key", settings) == test_wave(), "Bridge required a hosted API key");
+    settings["provider"] = "engine"; settings["coeiroinkEnabled"] = false;
+    require(audio.synthesize("disabled", settings) == test_wave(), "Disabled bridge did not fall back to primary");
+    require(bridge_requests.get().size() == 4 && primary_requests.get().size() == 2, "Disabled bridge still received requests");
+    // The real bridge streams without a Content-Type header. httplib's fixed
+    // body response adds text/plain by default, so use its streaming provider.
+    bridge.server.Post("/headerless/audio_query", [](const auto&, auto& response) {
+        response.set_content(R"({"accent_phrases":[]})", "application/json");
+    });
+    bridge.server.Post("/headerless/synthesis", [](const auto&, auto& response) {
+        response.set_chunked_content_provider("", [](std::size_t, httplib::DataSink& sink) {
+            const auto wav = test_wave(); sink.write(wav.data(), wav.size()); sink.done(); return true;
+        });
+    });
+    settings["coeiroinkEnabled"] = true; settings["coeiroinkUrl"] = bridge.origin + "/headerless";
+    require(audio.diagnose(settings)["ok"] == true, "Headerless bridge WAV failed validation");
+    settings["coeiroinkEnabled"] = true;
+    settings["systemSpeaker"] = "coeiroink:bad-uuid:90";
+    expect_error([&] { audio.synthesize("invalid", settings); }, 400);
+}
+
 void url_validation() {
     Loopback loop;
     Recording requests;
@@ -429,6 +493,8 @@ int main() {
         {"Device selection and legacy migration", device_resolution},
         {"Speech diagnosis without playback", speech_diagnostics},
         {"VOICEVOX and hosted request formatting", request_formatting},
+        {"Optional COEIROINK bridge routing", coeiroink_bridge_routing},
+        {"Direct COEIROINK API routing and exclusion", coeiroink_direct_routing},
         {"Cancellation before fetch", cancel_before_fetch},
         {"Engine URL validation", url_validation},
         {"Exact transient-status retry policy", retry_statuses},

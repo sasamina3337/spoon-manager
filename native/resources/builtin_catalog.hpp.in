@@ -1,0 +1,2 @@
+#pragma once
+inline constexpr char spoon_builtin_catalog[] = R"spoon(@spoon_builtin_catalog_cpp@)spoon";

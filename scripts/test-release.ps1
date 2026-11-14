@@ -8,7 +8,9 @@ $version = (Get-Content -Raw -Encoding UTF8 (Join-Path $ProjectRoot 'package.jso
 $name = "SpoonManager-$version-win64"
 $zipPath = Join-Path $ProjectRoot "dist/releases/$name.zip"
 $installer = Join-Path $ProjectRoot "dist/installers/$name-Setup.exe"
-if (!(Test-Path -LiteralPath $zipPath) -or !(Test-Path -LiteralPath $installer)) {
+$payloadRoot = Join-Path $ProjectRoot '.local/build/windows-release/installer-stage'
+if (!(Test-Path -LiteralPath $zipPath) -or !(Test-Path -LiteralPath $installer) -or
+    !(Test-Path -LiteralPath $payloadRoot -PathType Container)) {
     Write-Output 'Release artifacts are not built; build the Release configuration first.'
     exit 77
 }
@@ -17,7 +19,6 @@ New-Item -ItemType Directory -Force $runPath | Out-Null
 $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
     $prefix = "$name/"
-    $payloadRoot = Join-Path $ProjectRoot '.local/build/windows-release/installer-stage'
     $expected = @(Get-ChildItem -LiteralPath $payloadRoot -Recurse -File | ForEach-Object {
         $_.FullName.Substring($payloadRoot.Length + 1).Replace('\', '/')
     })
@@ -30,7 +31,7 @@ try {
         $relative = $entry.FullName.Substring($prefix.Length)
         if ($relative -match '(^|/)(\.env[^/]*|connection\.json|state\.json|tokens\.json|node_modules|test-data)(/|$)|\.(pdb|obj|lib|log|pem|key|pfx|p12|dmp)$' -or
             $relative -match '(^|/)(msvcp|vcruntime|concrt)[0-9_]+d[^/]*\.dll$' -or
-            $relative -notmatch '^(SpoonManager\.exe|cloudflared\.exe|LICENSE|[^/]+\.dll|ui/.+|licenses/.+|documentation/.+)$') {
+            $relative -notmatch '^(SpoonManager\.exe|cloudflared\.exe|LICENSE|[^/]+\.dll|ui/.+|licenses/.+|documentation/.+|voicevox/.+)$') {
             throw "Private, Debug or unexpected ZIP file: $relative"
         }
         $actual += $relative

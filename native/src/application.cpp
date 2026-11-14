@@ -4,6 +4,8 @@
 #include "spoon/spoon_client.hpp"
 #include "spoon/storage.hpp"
 #include "spoon/participation.hpp"
+#include "spoon/voice.hpp"
+#include "spoon/builtin_speech.hpp"
 #include <windows.h>
 #include <shlobj.h>
 #include <shellapi.h>
@@ -25,8 +27,11 @@ namespace {
 using namespace std::chrono_literals;
 
 Json default_settings() {
-    return {{"schemaVersion", 1}, {"provider", "engine"}, {"apiKey", ""},
+    return {{"schemaVersion", 1}, {"provider", "builtin"}, {"voiceTermsAccepted", ""},
+        {"autoVoiceCredits", true}, {"avoidRestrictedVoices", true}, {"additionalVoiceTermsAccepted", ""}, {"additionalVoiceUse", ""}, {"apiKey", ""},
         {"engineUrl", "http://127.0.0.1:50021"}, {"systemSpeaker", 3},
+        {"coeiroinkEnabled", false}, {"coeiroinkUrl", "http://127.0.0.1:50132"},
+        {"coeiroinkDirectEnabled", false}, {"coeiroinkDirectUrl", "http://127.0.0.1:50032"},
         {"commentSpeakers", Json::array({0, 2, 8, 10})}, {"speed", 1.0}, {"volume", 1.0},
         {"outputDeviceId", ""}, {"outputDeviceLabel", ""}, {"enabled", false},
         {"readNames", false}, {"eventEnabled", {{"comment", true}, {"entry", true},
@@ -83,10 +88,71 @@ Json api_event(const SseFrame& frame, const std::string& owner) {
     return event;
 }
 
+Json coeiroink_catalog(const Json& settings, std::stop_token stop = {}) {
+    const bool direct = settings.value("coeiroinkDirectEnabled", false);
+    if (direct && settings.value("coeiroinkEnabled", false)) throw std::runtime_error("COEIROINKの接続方式は1つだけ選んでください。");
+    auto url = direct ? text(settings, "coeiroinkDirectUrl", "http://127.0.0.1:50032") : text(settings, "coeiroinkUrl", "http://127.0.0.1:50132");
+    while (url.ends_with('/')) url.pop_back();
+    HttpResponse response;
+    try {
+        response = HttpClient{}.request("GET", url + (direct ? "/v1/speakers_path_variant" : "/speakers"), {}, {}, stop);
+        if (direct && response.status == 404) response = HttpClient{}.request("GET", url + "/v1/speakers", {}, {}, stop);
+    } catch (const std::exception&) {
+        if (stop.stop_requested()) throw AudioError(499, "音声テストを停止しました。");
+        throw std::runtime_error(direct ? "COEIROINK APIに接続できません。本体の起動状態とURL（通常50032）を確認してください。" : "COEIROINK v2 bridgeに接続できません。VOICEVOXとCOEIROINKを起動し、ブリッジのURL（通常50132）を確認してください。");
+    }
+    if (response.status != 200) throw std::runtime_error(direct ? "COEIROINKから声を取得できません。直接APIのURL（通常50032）を確認してください。" : "COEIROINKの声を取得できません。v2 bridgeのURL（通常50132）を確認してください。");
+    const auto speakers = Json::parse(response.body, nullptr, false);
+    Json voices = Json::array();
+    std::set<std::string> seen;
+    if (speakers.is_array()) for (const auto& speaker : speakers) {
+        const auto uuid = text(speaker, direct ? "speakerUuid" : "speaker_uuid");
+        if (!speaker.is_object() || !speaker.contains("styles") || !speaker["styles"].is_array()) continue;
+        for (const auto& style : speaker["styles"]) {
+            const auto* key = direct ? "styleId" : "id";
+            if (!style.is_object() || !style.contains(key) || !style[key].is_number_integer()) continue;
+            const auto id = "coeiroink:" + uuid + ":" + style[key].dump();
+            if (voices.size() >= 2000 || !coeiroink_voice(id) || !seen.insert(id).second) continue;
+            voices.push_back({{"id", id}, {"name", "COEIROINK:" + text(speaker, direct ? "speakerName" : "name") + "（" + text(style, direct ? "styleName" : "name") + "）"}});
+        }
+    }
+    if (voices.empty()) throw std::runtime_error("COEIROINKから有効な話者一覧を取得できませんでした。");
+    return voices;
+}
+
 void validate_settings(const Json& settings) {
     if (!settings.is_object()) throw std::runtime_error("設定の形式を確認してください。");
     const auto provider = text(settings, "provider", "engine");
-    if (provider != "engine" && provider != "legacy") throw std::runtime_error("未対応の音声APIです。");
+    if (provider != "engine" && provider != "legacy" && provider != "builtin") throw std::runtime_error("未対応の音声APIです。");
+    if (settings.contains("autoVoiceCredits") && !settings["autoVoiceCredits"].is_boolean())
+        throw std::runtime_error("クレジットの自動送信設定を確認してください。");
+    if (!settings.value("avoidRestrictedVoices", Json(true)).is_boolean() ||
+        (!settings.value("avoidRestrictedVoices", Json(true)).get<bool>() && !builtin_additional_terms_accepted(settings)))
+        throw std::runtime_error("追加音声を使用するには、各音声の規約と利用区分への同意が必要です。必要な連絡・許諾は利用者が対応してください。");
+    if (provider == "builtin") {
+        if (settings.value("enabled", false) && !builtin_terms_accepted(settings))
+            throw std::runtime_error("内蔵音声の利用規約とクレジットを確認してください。");
+        const auto valid = [&](const Json& id) { return builtin_voice_allowed(id, settings) ||
+            ((settings.value("coeiroinkEnabled", false) || settings.value("coeiroinkDirectEnabled", false)) && coeiroink_voice(id).has_value()); };
+        if (!valid(settings.value("systemSpeaker", Json(3)))) throw std::runtime_error("通知の声は内蔵モデルまたは有効なCOEIROINKから選んでください。");
+        const auto pool = settings.value("commentSpeakers", Json::array());
+        if (!pool.is_array() || pool.empty()) throw std::runtime_error("コメントに使う声を選んでください。");
+        for (const auto& id : pool) if (!valid(id)) throw std::runtime_error("コメントの声に内蔵モデルに含まれない話者があります。声を選び直してください。");
+    }
+    for (const auto* key : {"coeiroinkEnabled", "coeiroinkDirectEnabled"})
+        if (settings.contains(key) && !settings[key].is_boolean()) throw std::runtime_error("COEIROINKの設定を確認してください。");
+    if (settings.value("coeiroinkEnabled", false) && settings.value("coeiroinkDirectEnabled", false))
+        throw std::runtime_error("COEIROINKのブリッジ接続と直接API接続は同時にONにできません。");
+    if (settings.value("coeiroinkDirectEnabled", false)) {
+        const auto direct = text(settings, "coeiroinkDirectUrl", "http://127.0.0.1:50032");
+        if ((!direct.starts_with("http://") && !direct.starts_with("https://")) || direct.find_first_of("?#@\r\n\\") != std::string::npos)
+            throw std::runtime_error("COEIROINK APIのURLは認証情報・クエリを含まないhttp/httpsで指定してください。");
+    }
+    if (settings.value("coeiroinkEnabled", false)) {
+        const auto bridge = text(settings, "coeiroinkUrl", "http://127.0.0.1:50132");
+        if ((!bridge.starts_with("http://") && !bridge.starts_with("https://")) || bridge.find_first_of("?#@\r\n\\") != std::string::npos)
+            throw std::runtime_error("COEIROINK v2 bridgeのURLは認証情報・クエリを含まないhttp/httpsで指定してください。");
+    }
     for (const auto& [name, low, high] : {std::tuple{"speed", 0.5, 2.0}, std::tuple{"volume", 0.0, 1.0}}) {
         if (settings.contains(name) && (!settings[name].is_number() ||
             settings[name].get<double>() < low || settings[name].get<double>() > high))
@@ -198,25 +264,31 @@ struct Application::Impl {
                 auto choices = settings.value("commentSpeakers", Json::array());
                 const auto assignments = state.value("runtime", Json::object()).value("assignments", Json::object());
                 const auto id = text(event["user"], "id");
-                const auto system_voice = settings.value("systemSpeaker", 3);
-                const auto voices = state.value("runtime", Json::object()).value("voices", Json::array());
-                const auto character = [&voices](int speaker_id) {
-                    for (const auto& voice : voices) if (voice.value("id", -1) == speaker_id) {
+                const auto system_voice = settings.value("systemSpeaker", Json(3));
+                auto voices = state.value("runtime", Json::object()).value("voices", Json::array());
+                if (text(settings, "provider") == "builtin") {
+                    auto catalog = builtin_available_voices(settings);
+                    for (const auto& voice : voices) if (voice.contains("id") && voice["id"].is_string()) catalog.push_back(voice);
+                    voices = std::move(catalog);
+                }
+                const auto character = [&voices](const Json& speaker_id) {
+                    if (auto coeiroink = coeiroink_voice(speaker_id)) return "coeiroink:" + coeiroink->uuid;
+                    for (const auto& voice : voices) if (voice.value("id", Json(-1)) == speaker_id) {
                         auto name = text(voice, "name"); if (name.starts_with("VOICEVOX:")) name.erase(0, 8);
                         name = name.substr(0, std::min(name.find("（"), name.find('('))); return name;
                     }
                     return std::string{};
                 };
                 const auto reserved = [&](const Json& voice) {
-                    if (!voice.is_number_integer()) return true;
-                    const auto selected = voice.get<int>(); const auto name = character(selected), system_name = character(system_voice);
-                    return selected == system_voice || (!name.empty() && name == system_name) ||
-                        (voices.empty() && ((system_voice <= 3 && system_voice >= 0) && (selected == (system_voice ^ 2))));
+                    if (!voice_enabled(voice, settings)) return true;
+                    const auto name = character(voice), system_name = character(system_voice);
+                    return voice == system_voice || (!name.empty() && name == system_name) ||
+                        (voices.empty() && system_voice.is_number_integer() && system_voice <= 3 && system_voice >= 0 && voice == (system_voice.get<int>() ^ 2));
                 };
                 if (!choices.is_array()) choices = Json::array();
                 choices.erase(std::remove_if(choices.begin(), choices.end(), reserved), choices.end());
                 if (choices.empty()) choices.push_back(system_voice == 0 || system_voice == 2 ? 1 : 0);
-                if (assignments.contains(id) && assignments[id].is_number_integer() && !reserved(assignments[id])) settings["systemSpeaker"] = assignments[id];
+                if (assignments.contains(id) && !reserved(assignments[id])) settings["systemSpeaker"] = assignments[id];
                 else if (choices.is_array() && !choices.empty()) {
                     std::uint32_t hash = 2166136261u;
                     for (const unsigned char byte : id) hash = (hash ^ byte) * 16777619u;
@@ -370,9 +442,12 @@ void Application::configure(const Json& connection) {
 }
 
 void Application::save_settings(const Json& settings, const Json& preferences) {
-    validate_settings(settings);
+    if (!settings.is_object()) throw std::runtime_error("設定の形式を確認してください。");
     if (!preferences.is_object()) throw std::runtime_error("目標・定型文の形式を確認してください。");
     std::lock_guard lock(impl_->mutex);
+    auto effective = impl_->model.snapshot().at("settings");
+    effective.update(settings);
+    validate_settings(effective);
     auto previous = impl_->model;
     try {
         impl_->model.set_settings(settings); impl_->model.set_preferences(preferences); impl_->persist();
@@ -437,14 +512,16 @@ void Application::send_chat(const std::string& content) {
 }
 
 void Application::send_generated(const std::string& key, const std::string& content, const std::string& kind, const std::string& speech_kind) {
-    if (kind != "automatic" && kind != "bot") throw std::invalid_argument("送信種別を確認してください。");
+    if (kind != "automatic" && kind != "bot" && kind != "credit") throw std::invalid_argument("送信種別を確認してください。");
     const auto length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, content.data(), static_cast<int>(content.size()), nullptr, 0);
     if (length < 1 || length > 200) throw std::invalid_argument("コメントは1〜200文字で入力してください。");
+    if (kind == "credit" && length > 100) throw std::invalid_argument("音声クレジットは100文字以内に分割してください。");
     std::shared_ptr<SpoonClient> service; Json live, settings;
     {
         std::lock_guard lock(impl_->mutex);
         if (!impl_->receiving || impl_->active_key != key) throw std::runtime_error("配信が切り替わったため送信を中止しました。");
         service = impl_->client; const auto state = impl_->model.snapshot(); settings = state["settings"];
+        if (kind == "credit" && (!settings.value("enabled", false) || !settings.value("autoVoiceCredits", true))) return;
         if (!state["manager"]["preferences"].value("features", Json::object()).value("chat", false)) throw std::runtime_error("チャット送信を有効にしてください。");
         if (kind == "automatic" && state.value("runtime", Json::object()).value("sessions", Json::object()).value(key, Json::object()).value("automationPaused", false)) return;
         for (const auto& session : state["manager"]["sessions"]) if (text(session, "key") == key) live = session["live"];
@@ -544,10 +621,18 @@ Json Application::manager_action(const std::string& action, const std::string& k
 Json Application::voice_catalog() {
     Json settings;
     { std::lock_guard lock(impl_->mutex); settings = impl_->model.snapshot()["settings"]; }
+    if (text(settings, "provider") == "builtin") {
+        auto voices = builtin_available_voices(settings);
+        if (settings.value("coeiroinkEnabled", false) || settings.value("coeiroinkDirectEnabled", false))
+            for (auto& voice : coeiroink_catalog(settings)) voices.push_back(std::move(voice));
+        return voices;
+    }
     auto url = text(settings, "provider") == "engine" ? text(settings, "engineUrl", "http://127.0.0.1:50021") : "https://static.tts.quest/voicevox_speakers_utf8.json";
     if (text(settings, "provider") == "engine") { while (url.ends_with('/')) url.pop_back(); url += "/speakers"; }
-    auto response = HttpClient{}.request("GET", url);
-    if (response.status != 200) throw std::runtime_error("音声一覧を取得できませんでした。音声APIの接続先を確認してください。");
+    HttpResponse response;
+    try { response = HttpClient{}.request("GET", url); }
+    catch (const std::exception&) { if (!settings.value("coeiroinkDirectEnabled", false)) throw; }
+    if (response.status != 200 && !settings.value("coeiroinkDirectEnabled", false)) throw std::runtime_error("音声一覧を取得できませんでした。音声APIの接続先を確認してください。");
     auto body = Json::parse(response.body, nullptr, false); Json voices = Json::array();
     if (body.is_object() && body.contains("speakers")) body = body["speakers"];
     if (body.is_array()) for (std::size_t i = 0; i < body.size() && voices.size() < 2000; ++i) {
@@ -560,6 +645,9 @@ Json Application::voice_catalog() {
     }
     if (body.is_object()) for (const auto& [id, name] : body.items()) if (name.is_string()) {
         try { voices.push_back({{"id", std::stoi(id)}, {"name", name}}); } catch (...) {}
+    }
+    if (settings.value("coeiroinkEnabled", false) || settings.value("coeiroinkDirectEnabled", false)) {
+        for (auto& voice : coeiroink_catalog(settings)) voices.push_back(std::move(voice));
     }
     if (voices.empty()) throw std::runtime_error("音声APIから有効な話者一覧を取得できませんでした。");
     return voices;
@@ -648,6 +736,30 @@ void Application::test_voice(std::stop_token stop) {
     impl_->audio.speak("音声の接続テストです。", settings, stop);
     {std::lock_guard lock(impl_->mutex); impl_->audio_error.clear();}
     if (!stop.stop_requested()) set_status("保存済みの声で再生しました。");
+}
+void Application::test_voice_for(const std::string& source, std::stop_token stop) {
+    if (source != "voicevox" && source != "coeiroink") throw std::invalid_argument("音声テストの接続先が不正です。");
+    if (stop.stop_requested()) throw AudioError(499, "音声テストを停止しました。");
+    Json settings;
+    { std::lock_guard lock(impl_->mutex); settings = impl_->model.snapshot()["settings"]; }
+    auto speaker = settings.value("systemSpeaker", Json(0));
+    if (source == "coeiroink") {
+        if (!settings.value("coeiroinkDirectEnabled", false)) throw std::runtime_error("COEIROINKの直接API接続をONにして設定を保存してください。");
+        if (!coeiroink_voice(speaker)) {
+            speaker = nullptr;
+            const auto pool = settings.value("commentSpeakers", Json::array());
+            if (pool.is_array()) for (const auto& id : pool) if (coeiroink_voice(id)) { speaker = id; break; }
+            if (speaker.is_null()) speaker = coeiroink_catalog(settings, stop).at(0).at("id");
+        }
+    } else if (coeiroink_voice(speaker)) {
+        speaker = 0;
+        const auto pool = settings.value("commentSpeakers", Json::array());
+        if (pool.is_array()) for (const auto& id : pool) if (id.is_number_integer()) { speaker = id; break; }
+    }
+    settings["systemSpeaker"] = speaker;
+    impl_->audio.speak("音声の接続テストです。", settings, stop);
+    { std::lock_guard lock(impl_->mutex); impl_->audio_error.clear(); }
+    if (!stop.stop_requested()) set_status(source == "coeiroink" ? "COEIROINKの声で再生しました。" : "VOICEVOXの声で再生しました。");
 }
 Json Application::diagnose_speech(std::stop_token stop) {
     Json settings;

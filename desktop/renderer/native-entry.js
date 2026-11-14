@@ -1,4 +1,5 @@
-import {DEFAULT_SETTINGS, LEGACY_VOICES} from './shared/settings.js';
+import {DEFAULT_SETTINGS, LEGACY_VOICES, voiceEnabled} from './shared/settings.js';
+import {BUILTIN_VOICES} from './shared/builtin-voices.js';
 import {analyzeSessions, sessionOwner, STAT_FIELDS} from './shared/analytics.js';
 import {dailyAttendance} from './shared/attendance.js';
 import {installSetup} from './setup.js';
@@ -94,10 +95,12 @@ export function createNativeAdapter({call, now = () => Date.now(), onSnapshot = 
   }
   function readingState(raw) {
     const settings = settingsForPopup(raw.settings), native = object(raw._native);
-    const voices = array(raw.runtime?.voices || raw.voices).filter(voice => Number.isSafeInteger(voice?.id) && typeof voice.name === 'string');
+    const catalog = array(raw.runtime?.voices || raw.voices);
+    const voices = (settings.provider === 'builtin' ? [...BUILTIN_VOICES, ...catalog.filter(voice => typeof voice?.id === 'string')] : catalog)
+      .filter(voice => voiceEnabled(voice?.id, settings) && typeof voice.name === 'string');
     // The bundled catalog is an explicitly labelled offline list, never an API response.
     const ids = new Map((voices.length ? voices : LEGACY_VOICES).map(voice => [voice.id, copy(voice)]));
-    for (const id of [settings.systemSpeaker, ...array(settings.commentSpeakers)]) if (Number.isSafeInteger(id) && !ids.has(id)) ids.set(id, {id, name: `保存済み話者 ID ${id}`});
+    for (const id of [settings.systemSpeaker, ...array(settings.commentSpeakers)]) if (voiceEnabled(id, settings) && !ids.has(id)) ids.set(id, {id, name: `保存済み話者 ID ${id}`});
     const current = array(raw.manager?.sessions).find(session => session.key === native.activeKey);
     const participants = array(current?.users).map(user => ({...user, speaker: assignedSpeaker({...raw, settings}, user.id)}));
     return {ok: true, capabilities: {voiceCatalog: true}, settings, voices: [...ids.values()], participants, roomKey: native.activeKey || '',
@@ -105,11 +108,12 @@ export function createNativeAdapter({call, now = () => Date.now(), onSnapshot = 
       status: {enabled: settings.enabled, playing: voiceTesting, queued: Number(native.pendingSpeech) || 0, lastError: native.audioError || null}};
   }
   async function save(input) {
-    const raw = await snapshot(true);
-    const settings = mergeNativeFields(raw.settings, object(input.settings));
-    const preferences = mergeNativeFields(preferencesOf(raw), input.preferences || {});
-    await call('save-settings', {settings, preferences}); invalidate();
-    const saved = await snapshot();
+    const saved = await runtime.updateSettings(async raw => {
+      const settings = mergeNativeFields(raw.settings, object(input.settings));
+      const preferences = mergeNativeFields(preferencesOf(raw), input.preferences || {});
+      await call('save-settings', {settings, preferences}); invalidate();
+      return snapshot(true);
+    });
     return {...readingState(saved), manager: managerFromSnapshot(saved, {...selection, sessionKey: input.sessionKey, now: now()})};
   }
   async function authorizationURL() {
@@ -146,7 +150,10 @@ export function createNativeAdapter({call, now = () => Date.now(), onSnapshot = 
         case 'STOP': await call('stop-audio', {}); return {ok: true};
         case 'TEST_VOICE':
           voiceTesting = true;
-          try { await call('test-voice', {}); return {ok: true}; }
+          try {
+            if (input.source !== undefined && !['voicevox', 'coeiroink'].includes(input.source)) throw new Error('音声テストの接続先を確認してください。');
+            await call('test-voice', input.source ? {source: input.source} : {}); return {ok: true};
+          }
           finally { voiceTesting = false; invalidate(); }
         case 'DIAGNOSE_SPEECH': return {ok: true, diagnostic: await call('diagnose-speech', {})};
         case 'SEND_MANAGER_CHAT': {

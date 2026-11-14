@@ -13,8 +13,9 @@ Name "Spoon Manager"
 OutFile "${OUTPUT_FILE}"
 InstallDir "$LOCALAPPDATA\Programs\Spoon Manager"
 RequestExecutionLevel user
-SetCompressor /SOLID lzma
-SetCompressorDictSize 32
+; VVM data is already compressed/encrypted. zlib avoids spending minutes on
+; every package rebuild trying to recompress hundreds of MB of model data.
+SetCompressor /SOLID zlib
 ManifestDPIAware true
 VIProductVersion "${PRODUCT_VERSION}.0"
 VIAddVersionKey /LANG=1033 "ProductName" "Spoon Manager"

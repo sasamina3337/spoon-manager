@@ -61,7 +61,7 @@
 <div id="view-analysis" class="view" aria-labelledby="analysis-heading" hidden=""><div class="page-title"><div><h1 id="analysis-heading">記録・分析</h1><p class="page-description">保存済み配信の傾向を調べ、受信ログやCSVを確認します。</p></div></div><nav class="section-nav" aria-label="記録・分析の分類"><a href="#analysis/summary" data-section-group="analysis" data-section-link="summary">配信の分析</a><a href="#analysis/logs" data-section-group="analysis" data-section-link="logs">受信ログ</a></nav>
 <div data-section-group="analysis" data-section-panel="summary" hidden=""><section class="card analysis-card"><div class="section-title"><div><h2>保存済み配信の分析</h2></div><select id="analysis-limit" aria-label="分析する保存配信数"><option value="10">直近10配信</option><option value="5">直近5配信</option><option value="30">直近30配信</option><option value="100">直近100配信</option></select></div><p id="analysis-scope" class="hint"></p><div class="analysis-metrics"><div><span>スプーン合計</span><strong id="analysis-spoons">0</strong></div><div><span>ハート合計</span><strong id="analysis-hearts">0</strong></div><div><span>コメント合計</span><strong id="analysis-comments">0</strong></div><div><span>参加者（重複除外）</span><strong id="analysis-unique">0</strong></div></div><div class="section-title chart-heading"><h3>配信ごとの推移</h3><select id="trend-metric" aria-label="グラフの指標"><option value="spoons">スプーン</option><option value="hearts">ハート</option><option value="comments">コメント</option><option value="participants">参加者</option></select></div><div id="trend-chart" class="trend-chart" role="group" aria-label="保存済み配信の実績グラフ"></div><p class="hint">棒を選ぶとその配信を表示します。左が古い配信、右が新しい配信です。</p><div class="insight-grid"><div><span>この配信の再訪者</span><strong id="analysis-returning">—</strong><small id="returning-detail">以前の保存記録と照合します。</small></div><div><span>この配信のコメント / 分</span><strong id="analysis-rate">—</strong><small>初回受信から最終観測までの期間で計算</small></div></div><details class="details"><summary>分析の定義と保存範囲</summary><p class="hint">アプリ全体で直近最大100配信を保存します。公式APIは同じDJの配信を分析します。画面取得ではDJのIDを確実に得られないため、配信ごとに分けて集計します。参加者・再訪者は保存したIDで照合し、未記録の人を新規とは断定しません。1配信の参加者は1000人まで。受信前・切断中のイベントは補完しません。観測期間は休止・切断時間を含むことがあり、配信全体の時間ではありません。</p></details><div class="section-title"><h3>配信別レポート</h3><button id="export-analysis" type="button">分析CSVを保存</button></div><div class="table-wrap"><table><thead><tr><th>配信</th><th>コメント</th><th>ハート</th><th>スプーン</th><th>参加者</th></tr></thead><tbody id="analysis-rows"></tbody></table></div></section>
 <section class="card"><div class="section-title"><h2>保存分の貢献上位</h2><span class="hint">スプーン → ハート → コメント順</span></div><ol id="contributors" class="contributors"></ol></section>
-</div><div data-section-group="analysis" data-section-panel="logs" hidden=""><section class="card"><div class="section-title"><h2>受信ログ</h2><button id="export-events" type="button">ログCSVを保存</button></div><div class="filters"><input id="event-search" type="search" placeholder="名前・本文で検索" aria-label="ログを検索"><select id="event-type" aria-label="ログの種類"><option value="">すべての種類</option><option value="comment">コメント</option><option value="entry">入室</option><option value="heart">ハート</option><option value="spoon">スプーン</option><option value="follow">フォロー</option><option value="automatic">自動コメント送信</option><option value="automaticError">自動コメント失敗</option><option value="bot">ボット送信</option><option value="botError">ボット送信失敗</option></select></div><div id="events" class="event-list"></div><details class="details"><summary>記録とCSVの保存範囲</summary><p class="hint">直近100配信、1配信につきログ10,000件・参加者1000人まで保存します。集計値はログの上限を超えても加算します。ログは100件ずつ追加表示できます。CSVには検索結果にかかわらず、選択中の配信の保存済みデータ全件を含みます。</p></details></section>
+</div><div data-section-group="analysis" data-section-panel="logs" hidden=""><section class="card"><div class="section-title"><h2>受信ログ</h2><button id="export-events" type="button">ログCSVを保存</button></div><div class="filters"><input id="event-search" type="search" placeholder="名前・本文で検索" aria-label="ログを検索"><select id="event-type" aria-label="ログの種類"><option value="">すべての種類</option><option value="comment">コメント</option><option value="entry">入室</option><option value="heart">ハート</option><option value="spoon">スプーン</option><option value="follow">フォロー</option><option value="automatic">自動コメント送信</option><option value="automaticError">自動コメント失敗</option><option value="credit">音声クレジット</option><option value="credit-error">音声クレジット送信失敗</option><option value="bot">ボット送信</option><option value="botError">ボット送信失敗</option></select></div><div id="events" class="event-list"></div><details class="details"><summary>記録とCSVの保存範囲</summary><p class="hint">直近100配信、1配信につきログ10,000件・参加者1000人まで保存します。集計値はログの上限を超えても加算します。ログは100件ずつ追加表示できます。CSVには検索結果にかかわらず、選択中の配信の保存済みデータ全件を含みます。</p></details></section>
 </div></div>
 <div id="view-settings" class="view" aria-labelledby="settings-heading" hidden="">
       <div class="page-title"><div><h1 id="settings-heading">設定</h1><p class="page-description">目的別に設定を変更し、画面下の「設定を保存」でまとめて反映します。</p></div><span id="prefs-state" class="muted">保存済み</span></div>
@@ -88,12 +88,20 @@
         <div data-settings-panel="voice" hidden=""><section class="card" aria-labelledby="v-connection-heading">
           <label class="check-row"><input id="v-enabled" type="checkbox"><span>読み上げを有効にする</span></label><div class="section-heading"><h2 id="v-connection-heading">VOICEVOX に接続</h2><span class="step-label">接続先</span></div>
           <label class="field" for="v-provider">
-            <span>利用する API</span>
+            <span>音声合成の方法</span>
             <select id="v-provider">
+              <option value="builtin">内蔵VOICEVOX（オフライン）</option>
               <option value="legacy">WEB 版 VOICEVOX（tts.quest）</option>
               <option value="engine">VOICEVOX ENGINE（ローカル / サーバー）</option>
             </select>
           </label>
+          <div id="v-builtin-fields" hidden>
+            <p class="hint">VOICEVOXの別途インストール・起動は不要です。通常は92スタイル、追加音声の利用条件への同意後は132スタイルをこのPCで合成します。</p>
+            <label class="check-row"><input id="v-voice-terms" type="checkbox"><span>下の音声利用規約を確認し、配信プロフィール・概要欄等にクレジットを記載して使用します。</span></label>
+            <label class="check-row"><input id="v-avoid-restricted-voices" type="checkbox" checked><span>追加許諾が必要な音声を避ける（推奨）</span></label>
+            <p class="hint">OFFにすると、各音声の規約と利用区分を確認します。商用・法人などで必要な連絡・許諾は、その音声を使用する利用者が対応してください。アプリ本体のMITと各音声の条件は別です。この設定は内蔵音声に適用します。</p>
+            <p id="v-additional-voice-status" class="hint" role="status"></p>
+          </div>
           <div id="v-legacy-fields">
             <label class="field" for="v-api-key"><span>API キー</span></label>
             <div class="input-action">
@@ -106,7 +114,36 @@
             <label class="field" for="v-engine-url"><span>エンジンの URL</span><input id="v-engine-url" type="url" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:50021" aria-describedby="v-engine-help"></label>
             <p id="v-engine-help" class="hint">VOICEVOXを起動し、接続先のURLを指定してください。</p>
           </div>
-        <div class="control-footer"><span class="hint">保存した接続先でHTTP応答と音声合成を確認します。</span><button id="v-diagnose-speech" type="button">API通信確認</button></div><p id="v-speech-diagnostic" class="result" role="status" hidden></p></section>
+          <label class="check-row"><input id="v-coeiroink-enabled" type="checkbox"><span>ブリッジでCOEIROINKの声を追加する</span></label>
+          <div id="v-coeiroink-fields" hidden>
+            <label class="field" for="v-coeiroink-url"><span>COEIROINK v2 bridgeのURL</span><input id="v-coeiroink-url" type="url" placeholder="http://127.0.0.1:50132"></label>
+            <p class="hint">VOICEVOXに追加したブリッジの接続先を指定します。COEIROINKの直接API接続とは同時に使用できません。</p>
+          </div>
+          <p id="v-coeiroink-bridge-status" class="hint"></p>
+        <div class="control-footer"><span class="hint">保存した接続先でHTTP応答と音声合成を確認します。</span><button id="v-diagnose-speech" type="button">API通信確認</button><button id="v-voicevox-test" type="button">VOICEVOX音声テスト</button></div><p id="v-speech-diagnostic" class="result" role="status" hidden></p><p id="v-voicevox-test-status" class="hint" role="status"></p></section>
+<section class="card" aria-labelledby="v-coeiroink-heading">
+          <div class="section-heading"><h2 id="v-coeiroink-heading">COEIROINK に接続</h2><span class="step-label">任意</span></div>
+          <label class="check-row"><input id="v-coeiroink-direct-enabled" type="checkbox"><span>COEIROINKのAPIに直接接続する</span></label>
+          <div id="v-coeiroink-direct-fields" hidden>
+            <label class="field" for="v-coeiroink-direct-url"><span>COEIROINK APIのURL</span><input id="v-coeiroink-direct-url" type="url" placeholder="http://127.0.0.1:50032"></label>
+            <p class="hint">COEIROINK v2本体を起動してください。設定を保存すると、声一覧にCOEIROINKの声を追加できます。</p>
+          </div>
+          <p id="v-coeiroink-direct-status" class="hint"></p>
+          <div class="control-footer"><span class="hint">保存したCOEIROINKの声と共通の出力先で再生します。通知用の声が別エンジンの場合は、COEIROINKの候補から選んでテストします。</span><button id="v-coeiroink-test" type="button">COEIROINK音声テスト</button></div>
+          <p id="v-coeiroink-test-status" class="hint" role="status"></p>
+        </section>
+<section class="card" aria-labelledby="v-credit-heading">
+          <h2 id="v-credit-heading">音声クレジット・利用規約</h2>
+          <label class="check-row"><input id="v-auto-voice-credits" type="checkbox" checked><span>入室コメントの後と音声変更時に、クレジットを自動送信する</span></label>
+          <p class="hint">この配信で割り当てた音声をエンジン別にまとめ、100文字以内に分けて送信します。退室・声変更後も配信終了まで残し、次の配信ではリセットします。入室あいさつがOFFでも送信します。チャット送信の権限と入室イベントの受信が必要です。</p>
+          <p id="v-credit-off-warning" class="hint error" role="alert" hidden>クレジットの自動送信はOFFです。音声を配信・録画に含める場合は、各音声の規約で認められた場所への表記を別途行ってください。配信へ音声を載せる設定に戻した際は、ONへの切り替えも確認してください。割り当て履歴はOFF中も保持します。</p>
+          <p class="hint">音声合成にVOICEVOXを使用しています。内蔵音声の権利は各提供元に帰属します。配信・録画で使う場合は、下の表記を配信プロフィール・概要欄等の視聴者が確認できる場所に掲載してください。アプリ内の表示だけでは配信のクレジットになりません。</p>
+          <label class="field" for="v-speech-credits"><span>配信用クレジット（追加音声を含む同梱音声と取得済みの候補すべて）</span><textarea id="v-speech-credits" rows="7" readonly></textarea></label>
+          <button id="v-copy-credits" type="button">クレジットをコピー</button><p id="v-credit-status" class="hint" role="status"></p>
+          <details class="settings-details"><summary>内蔵音声の規約と注意点</summary><p class="hint">2026年11月14日確認。個別規約の禁止用途にも従ってください。立ち絵・設定等のキャラクター素材は同梱していません。追加音声は既定では対象外で、利用区分と規約への同意後に選べます。非商用でも用途によって事前連絡・許諾が必要です。音声やモデルを学習用データとして利用する機能は提供していません。モデルと依存部品の規約・著作権表示・確認記録は、配布フォルダーのvoicevox/licensesに同梱しています。</p><ul id="v-model-terms"></ul></details>
+          <p class="hint">外部VOICEVOX・COEIROINKの音声は、各音声の最新規約と指定クレジットを確認してください。企業利用等で追加許諾が必要な場合があります。COEIROINK本体・モデルは同梱していません。</p>
+          <p class="hint"><a href="https://github.com/VOICEVOX/voicevox_vvm/blob/0.17.1/TERMS.txt" target="_blank" rel="noopener">VOICEVOX音声モデル共通規約</a> ／ <a href="https://coeiroink.com/terms" target="_blank" rel="noopener">COEIROINK利用規約</a></p>
+        </section>
 <section class="card" aria-labelledby="v-output-heading">
           <div class="section-heading"><h2 id="v-output-heading">音声の出力先</h2><button id="v-refresh-outputs" type="button" class="text-button">出力先を更新</button></div>
           <label class="field" for="v-output-device"><span>読み上げを送るデバイス</span><select id="v-output-device" aria-describedby="v-output-status"><option value="">Windows の既定の出力先</option></select></label>
@@ -230,4 +267,17 @@
 
 
 
+<dialog id="v-additional-voice-dialog" aria-labelledby="v-additional-voice-heading" aria-describedby="v-additional-voice-description">
+  <h2 id="v-additional-voice-heading">追加音声の利用条件を確認</h2>
+  <p id="v-additional-voice-description">VVMの同梱・再配布は共通規約で許可されています。生成音声を使う際は、利用者が次の各ガイドラインに従ってください。この確認画面自体が権利者の許諾を与えるものではありません。</p>
+  <ul id="v-additional-model-terms"></ul>
+  <p>広告・投げ銭・メンバーシップ・スポンサー等による収益がある場合は、各規約の非商用の範囲に含まれるか個別に確認してください。規約の収益化の例外を、すべての配信に適用することはできません。必要な許諾が未取得の用途には使わないでください。</p>
+  <fieldset><legend>利用区分</legend>
+    <label class="check-row"><input id="v-additional-use-personal" name="v-additional-use" type="radio" value="personalNoncommercial"><span>個人・非商用：法人・個人事業主・企業等と契約した個人としての利用ではなく、各規約が許す個人・非商用の範囲で使います。</span></label>
+    <label class="check-row"><input id="v-additional-use-licensed" name="v-additional-use" type="radio" value="licensed"><span>必要な連絡・許諾を対応済み：商用・法人利用等で使う音声ごとに必要な連絡・許諾を済ませ、その許諾の範囲で使います。</span></label>
+  </fieldset>
+  <label class="check-row"><input id="v-additional-use-confirm" type="checkbox"><span>選択した利用区分の条件を満たしています。利用形態が変わった場合も、使う音声ごとに条件を再確認します。</span></label>
+  <label class="check-row"><input id="v-additional-rules-confirm" type="checkbox"><span>各リンク先の規約・禁止用途を確認しました。用途別に事前連絡・許諾が必要な場合は取得し、指定クレジットを視聴者が確認できる場所に掲載します。</span></label>
+  <div class="save-actions"><button id="v-additional-voice-cancel" type="button" autofocus>キャンセル</button><button id="v-additional-voice-accept" type="button" class="primary" disabled>同意して追加音声を選ぶ</button></div>
+</dialog>
 </body></html>

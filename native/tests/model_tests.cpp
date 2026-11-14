@@ -217,7 +217,7 @@ void counting_and_lifecycle() {
 void manager_preferences() {
     const Json previous = {{"heartGoal", 300}, {"futurePreference", "keep"},
         {"features", {{"futureScope", false}}}, {"commands", {{"futureCommand", 42}}}};
-    Model model({{"manager", {{"preferences", previous}}}});
+    Model model(Json{{"manager", {{"preferences", previous}}}});
     model.set_preferences({{"spoonGoal", "500"}, {"features", {{"fans", true}}},
         {"commands", {{"cooldownSeconds", 1}}}, {"templates", Json::array({{{"label", "  案内  "}, {"text", " hello\nworld "}, {"futureTemplate", 7}}})}});
     auto state = model.snapshot();

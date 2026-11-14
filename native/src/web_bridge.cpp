@@ -120,8 +120,11 @@ Json WebBridge::dispatch(std::string operation, const Json& input) {
         return application_.audio_devices();
     }
     if (operation == "test-voice") {
-        fields(input, {});
-        application_.test_voice();
+        if (input.is_object() && input.contains("source")) {
+            fields(input, {"source"});
+            if (!input["source"].is_string()) throw std::invalid_argument("音声テストの接続先が不正です。");
+            application_.test_voice_for(input["source"].get<std::string>());
+        } else { fields(input, {}); application_.test_voice(); }
         return nullptr;
     }
     if (operation == "diagnose-speech") {

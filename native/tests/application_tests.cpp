@@ -1,4 +1,5 @@
 #include "spoon/application.hpp"
+#include "spoon/builtin_speech.hpp"
 #include "spoon/storage.hpp"
 #include <windows.h>
 #include <filesystem>
@@ -47,6 +48,28 @@ int main() {
             require(state["settings"]["volume"] == 0.8, "settings not changed");
             require(state["settings"]["futureSetting"] == 17, "settings patch removed unknown field");
             require(state["manager"]["preferences"]["futurePreference"] == 23, "preference patch removed unknown field");
+            auto personal = state["settings"];
+            personal["provider"] = "builtin"; personal["enabled"] = false;
+            personal["avoidRestrictedVoices"] = false;
+            personal["systemSpeaker"] = 13; personal["commentSpeakers"] = spoon::Json::array({20, 55});
+            rejects([&] { app.save_settings(personal, spoon::Json::object()); }, "Personal voices accepted without consent");
+            personal["additionalVoiceTermsAccepted"] = "old-terms";
+            rejects([&] { app.save_settings(personal, spoon::Json::object()); }, "Stale personal consent accepted");
+            personal["additionalVoiceTermsAccepted"] = spoon::builtin_voice_manifest().at("additionalTermsRevision");
+            rejects([&] { app.save_settings(personal, spoon::Json::object()); }, "Additional voices accepted without use category");
+            personal["additionalVoiceUse"] = "personalNoncommercial";
+            app.save_settings(personal, spoon::Json::object());
+            require(app.voice_catalog().size() == 132, "Personal catalog not exposed after consent");
+            personal["additionalVoiceUse"] = "licensed";
+            app.save_settings(personal, spoon::Json::object());
+            require(app.voice_catalog().size() == 132, "Licensed users were blocked");
+            personal["avoidRestrictedVoices"] = true;
+            rejects([&] { app.save_settings(personal, spoon::Json::object()); }, "Restricted saved voices survived revocation");
+            personal["systemSpeaker"] = 3; personal["commentSpeakers"] = spoon::Json::array({0, 2, 8});
+            personal["additionalVoiceTermsAccepted"] = "";
+            personal["additionalVoiceUse"] = "";
+            app.save_settings(personal, spoon::Json::object());
+            require(app.voice_catalog().size() == 92, "Default catalog exposes personal voices");
             app.import_demo_events();
             const auto first = app.snapshot()["manager"]["sessions"][0]["totals"];
             app.import_demo_events();

@@ -1,15 +1,44 @@
-import {ChatCommands, parseCommand, helpMessage, voiceListMessage, resolveVoice, chatText, isCommandEnabled} from './background/chat-commands.js';
+import {ChatCommands, parseCommand, helpMessage, voiceListMessage, voiceChoices, resolveVoice, chatText, isCommandEnabled} from './background/chat-commands.js';
 import {requestSubmission, restoreRequests, setRequestsOpen, submitRequest, updateRequestStatus} from './background/requests.js';
 import {executeBoard, boardSummary} from './background/board-games.js';
 import {newReversi, newShogi, moveReversi, moveShogi, SHOGI_PIECES} from './background/board-rules.js';
 import {boardCoordinate} from './shared/board-coordinates.js';
 import {randomInt} from './shared/random.js';
-import {automaticText, LEGACY_VOICES, notificationVoiceIds} from './shared/settings.js';
+import {automaticText, LEGACY_VOICES, notificationVoiceIds, voiceEnabled} from './shared/settings.js';
 import {drawListeners} from './shared/manager-utils.js';
+import {BUILTIN_VOICES} from './shared/builtin-voices.js';
+import {voiceCredit, creditHistory, creditMessages, validateCreditMessages, voiceChangeMessages} from './shared/speech-credits.js';
 
 const obj = value => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const list = value => Array.isArray(value) ? value : [];
 const clone = value => structuredClone(value);
+const creditUsers = users => list(users).filter(user => typeof user?.id === 'string' && user.id);
+const voiceCatalog = raw => raw.settings?.provider === 'builtin' ?
+  [...BUILTIN_VOICES, ...list(raw.runtime?.voices).filter(voice => typeof voice?.id === 'string')] :
+  list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES;
+
+function rememberVoiceCredits(session, runtime, raw, users = null) {
+  const settings = obj(raw.settings), catalog = voiceCatalog(raw);
+  users ??= Array.isArray(raw._native?.listeners) ? raw._native.listeners : session.users;
+  const ids = new Set([settings.systemSpeaker, ...creditUsers(users).map(user => assignedSpeaker({...raw, runtime}, user.id))]);
+  const credits = new Set(creditHistory(session.voiceCreditHistory ?? []));
+  for (const id of ids) {
+    if (!voiceEnabled(id, settings)) continue;
+    const credit = voiceCredit(catalog.find(voice => voice?.id === id));
+    if (credit) credits.add(credit);
+  }
+  session.voiceCreditHistory = creditHistory([...credits]);
+}
+
+function outgoingMessages(raw, key, text, kind) {
+  if (kind !== 'credit') return [{text: chatText(text), kind}];
+  const input = obj(text);
+  const messages = validateCreditMessages(input.messages ?? creditMessages(runtimeSession(raw, key).voiceCreditHistory ?? []));
+  return [
+    ...(typeof input.greeting === 'string' && input.greeting ? [{text: chatText(input.greeting), kind: 'automatic'}] : []),
+    ...messages.map(message => ({text: message, kind: 'credit'}))
+  ];
+}
 const counterNames = ['diceRolls', 'jankenWins', 'jankenLosses', 'jankenDraws', 'guessPlayed', 'guessCleared', 'reversiPlayed', 'reversiWins', 'reversiLosses', 'reversiDraws', 'shogiPlayed', 'shogiWins', 'shogiLosses', 'shogiDraws'];
 export function runtimeSession(raw, key) {
   const session = list(raw.manager?.sessions).find(item => item.key === key);
@@ -20,10 +49,10 @@ export function runtimeSession(raw, key) {
 }
 export function assignedSpeaker(raw, userId) {
   const settings = obj(raw.settings), pool = list(settings.commentSpeakers);
-  const reserved = notificationVoiceIds(list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES, settings.systemSpeaker);
-  const allowed = pool.filter(id => !reserved.includes(id));
+  const reserved = notificationVoiceIds(voiceCatalog(raw), settings.systemSpeaker);
+  const allowed = pool.filter(id => voiceEnabled(id, settings) && !reserved.includes(id));
   const explicit = raw.runtime?.assignments?.[userId];
-  if (Number.isSafeInteger(explicit) && !reserved.includes(explicit)) return explicit;
+  if (voiceEnabled(explicit, settings) && !reserved.includes(explicit)) return explicit;
   let hash = 2166136261;
   for (const byte of new TextEncoder().encode(userId)) hash = Math.imul(hash ^ byte, 16777619) >>> 0;
   return allowed.length ? allowed[hash % allowed.length] : LEGACY_VOICES.find(voice => !reserved.includes(voice.id))?.id ?? 0;
@@ -83,23 +112,66 @@ export class NativeRuntime {
   }
   serial(task) { const result = this.chain.then(task); this.chain = result.catch(() => {}); return result; }
   async change(key, task) {
-    return this.serial(async () => {
-      const raw = await this.snapshot(true); this.raw = raw;
-      const runtime = clone(obj(raw.runtime)); runtime.sessions = obj(runtime.sessions); runtime.assignments = obj(runtime.assignments); runtime.profiles = obj(runtime.profiles);
-      const session = runtimeSession(raw, key);
-      const result = await task(session, runtime, raw);
-      runtime.sessions[key] = {requests: session.requests, poll: session.poll || null, automationPaused: session.automationPaused === true};
-      const keys = new Set(list(raw.manager?.sessions).map(item => item.key));
-      for (const id of Object.keys(runtime.sessions)) if (!keys.has(id)) delete runtime.sessions[id];
-      // Retain the most recently used game profiles; never grow without a bound.
-      const profiles = Object.entries(runtime.profiles).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
-      runtime.profiles = Object.fromEntries(profiles.slice(0, 500));
-      await this.call('save-runtime', {runtime}); this.invalidate(); this.raw = {...raw, runtime};
-      return result;
-    });
+    return this.serial(async () => this.changeSession(await this.snapshot(true), key, task));
+  }
+  // Call only inside serial(): settings saves and assignments share this lock.
+  async changeSession(raw, key, task) {
+    this.raw = raw;
+    const runtime = clone(obj(raw.runtime)); runtime.sessions = obj(runtime.sessions); runtime.assignments = obj(runtime.assignments); runtime.profiles = obj(runtime.profiles);
+    const session = runtimeSession(raw, key);
+    const active = raw._native?.receiving && raw._native.activeKey === key;
+    if (active) rememberVoiceCredits(session, runtime, raw);
+    const result = await task(session, runtime, raw);
+    if (active) rememberVoiceCredits(session, runtime, raw, creditUsers(session.users).filter(user => raw.runtime?.assignments?.[user.id] !== runtime.assignments[user.id]));
+    runtime.sessions[key] = {...obj(runtime.sessions[key]), requests: session.requests, poll: session.poll || null,
+      automationPaused: session.automationPaused === true, voiceCreditHistory: list(session.voiceCreditHistory)};
+    const keys = new Set(list(raw.manager?.sessions).map(item => item.key));
+    for (const id of Object.keys(runtime.sessions)) if (!keys.has(id)) delete runtime.sessions[id];
+    // Retain the most recently used game profiles; never grow without a bound.
+    const profiles = Object.entries(runtime.profiles).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+    runtime.profiles = Object.fromEntries(profiles.slice(0, 500));
+    await this.call('save-runtime', {runtime}); this.invalidate(); this.raw = {...raw, runtime};
+    if (active) this.notifyVoiceChanges(raw, this.raw);
+    return result;
   }
   current(raw, key) {
     if (!raw._native?.receiving || raw._native.activeKey !== key) throw new Error('受信中の現在の配信を選択してください。');
+  }
+  updateSettings(save) {
+    return this.serial(async () => {
+      const before = await this.snapshot(true);
+      let saved = await save(before);
+      const previousKey = before._native?.receiving ? before._native.activeKey : null;
+      const currentKey = saved._native?.receiving ? saved._native.activeKey : null;
+      this.raw = saved;
+      for (const key of new Set([previousKey, currentKey])) {
+        if (!key || !list(saved.manager?.sessions).some(session => session.key === key)) continue;
+        await this.changeSession(saved, key, session => {
+          if (key === previousKey) rememberVoiceCredits(session, obj(before.runtime), before);
+        });
+        saved = this.raw;
+      }
+      this.notifyVoiceChanges(before, saved);
+      return saved;
+    });
+  }
+  notifyVoiceChanges(before, after) {
+    const key = after._native?.activeKey, settings = obj(after.settings);
+    if (!after._native?.receiving || key !== before._native?.activeKey || settings.enabled === false || settings.autoVoiceCredits === false) return;
+    const session = list(after.manager?.sessions).find(item => item.key === key);
+    if (!session) return;
+    const activeUsers = Array.isArray(after._native?.listeners) ? after._native.listeners : session.users;
+    const changedExplicit = creditUsers(session.users).filter(user => before.runtime?.assignments?.[user.id] !== after.runtime?.assignments?.[user.id]);
+    const users = new Map([...creditUsers(activeUsers), ...changedExplicit].map(user => [user.id, user]));
+    const changes = [];
+    if (before.settings?.systemSpeaker !== settings.systemSpeaker) changes.push({name: '通知・返信', id: settings.systemSpeaker});
+    for (const user of users.values()) if (assignedSpeaker(before, user.id) !== assignedSpeaker(after, user.id))
+      changes.push({name: String(user.name || 'リスナー'), id: assignedSpeaker(after, user.id)});
+    if (!changes.length) return;
+    try {
+      const messages = voiceChangeMessages(changes, voiceCatalog(after));
+      void this.send(key, {messages}, 'credit').catch(() => {});
+    } catch (error) { this.automation.failed++; this.automation.message = error.message; }
   }
   async participation(action, payload = {}) {
     if (action === 'start') {const raw = await this.snapshot(true); this.current(raw, raw._native?.activeKey);}
@@ -178,14 +250,16 @@ export class NativeRuntime {
     if (input.type === 'SET_ASSIGNMENT' || input.type === 'RESET_ASSIGNMENTS' || input.type === 'REFRESH_VOICES') {
       if (input.type === 'REFRESH_VOICES') {
         const voices = await this.call('voice-catalog', {});
-        await this.serial(async () => { const latest = await this.snapshot(true); await this.call('save-runtime', {runtime: {...obj(latest.runtime), voices, voiceProvider: latest.settings?.provider, voiceEngineUrl: latest.settings?.engineUrl}}); this.invalidate(); });
+        await this.serial(async () => { const latest = await this.snapshot(true); await this.call('save-runtime', {runtime: {...obj(latest.runtime), voices, voiceProvider: raw.settings?.provider, voiceEngineUrl: raw.settings?.engineUrl,
+          voiceCoeiroinkEnabled: raw.settings?.coeiroinkEnabled === true, voiceCoeiroinkUrl: raw.settings?.coeiroinkUrl,
+          voiceCoeiroinkDirectEnabled: raw.settings?.coeiroinkDirectEnabled === true, voiceCoeiroinkDirectUrl: raw.settings?.coeiroinkDirectUrl}}); this.invalidate(); });
         return;
       }
-      return this.change(key, (session, runtime) => {
+      return this.change(key, (session, runtime, current) => {
         if (input.type === 'RESET_ASSIGNMENTS') for (const user of session.users) delete runtime.assignments[user.id];
         else {
-          if (!session.users.some(user => user.id === input.userId) || !Number.isSafeInteger(input.speaker) || input.speaker < 0) throw new Error('参加者と音声を確認してください。');
-          const reserved = notificationVoiceIds(list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES, raw.settings.systemSpeaker);
+          if (!session.users.some(user => user.id === input.userId) || !voiceEnabled(input.speaker, current.settings)) throw new Error('参加者と音声を確認してください。');
+          const reserved = notificationVoiceIds(voiceCatalog(current), current.settings.systemSpeaker);
           if (reserved.includes(input.speaker)) throw new Error('通知用の声はリスナーに割り当てられません。');
           runtime.assignments[input.userId] = input.speaker;
         }
@@ -204,24 +278,44 @@ export class NativeRuntime {
     throw new Error('操作を確認してください。');
   }
   send(key, text, kind = 'automatic', speechKind = '', commandName = '') {
-    if (this.queued >= 16) return Promise.reject(new Error('送信待ちが多いため応答を省略しました。'));
+    if (this.queued >= 16) {
+      const error = new Error('送信待ちが多いため応答を省略しました。');
+      if (kind === 'credit') { this.automation.failed++; this.automation.message = 'クレジットを送信できません。送信待ちが多いため、別の場所への表記を確認してください。'; }
+      return Promise.reject(error);
+    }
     this.queued++;
     const created = this.now(), generation = this.generation;
     const result = this.outbox.then(async () => {
       if (this.now() < this.blockedUntil) throw Object.assign(new Error('APIの送信制限のため、応答を一時休止しています。'), {status:429, retryAfter:Math.ceil((this.blockedUntil-this.now())/1000)});
-      const delay = Math.max(0, 3000 - (this.now() - this.lastSent));
-      if (delay) await this.wait(delay);
       if (generation !== this.generation) return;
-      const raw = await this.snapshot(true); this.current(raw, key);
-      if (commandName && (!isCommandEnabled(raw.manager?.preferences?.commands, commandName) || (kind === 'bot' && !raw.manager?.preferences?.commands?.enabled))) return;
-      if (!raw.manager?.preferences?.features?.chat) throw new Error('設定の「チャット送信」を有効にし、DJの同意を取得してください。');
-      if (kind === 'automatic' && raw.runtime?.sessions?.[key]?.automationPaused) return;
-      if (this.now() - created > 60000) return;
-      this.lastSent = this.now();
-      await this.call('send-generated', {sessionKey: key, text: chatText(text), kind, speechKind}); this.invalidate();
-      if (kind === 'automatic') {this.automation.sent++; this.automation.message = '自動コメントを送信しました。';}
+      const initial = await this.snapshot(true);
+      if (generation !== this.generation) return;
+      this.current(initial, key);
+      if (kind === 'credit' && (initial.settings?.enabled === false || initial.settings?.autoVoiceCredits === false)) return;
+      const batch = outgoingMessages(initial, key, text, kind);
+      // A greeting and all its credit chunks occupy one queue position, so
+      // another entry/gift/command cannot split the pair.
+      for (const message of batch) {
+        const delay = Math.max(0, 3000 - (this.now() - this.lastSent));
+        if (delay) await this.wait(delay);
+        if (generation !== this.generation) return;
+        const raw = await this.snapshot(true);
+        if (generation !== this.generation) return;
+        this.current(raw, key);
+        if (commandName && (!isCommandEnabled(raw.manager?.preferences?.commands, commandName) || (kind === 'bot' && !raw.manager?.preferences?.commands?.enabled))) return;
+        if (!raw.manager?.preferences?.features?.chat) throw new Error('設定の「チャット送信」を有効にし、DJの同意を取得してください。');
+        if (kind === 'credit' && (raw.settings?.enabled === false || raw.settings?.autoVoiceCredits === false)) return;
+        if (message.kind === 'automatic' && raw.runtime?.sessions?.[key]?.automationPaused) continue;
+        if (this.now() - created > 60000) {
+          if (kind === 'credit') throw new Error('クレジットの送信待ちが長いため中止しました。掲載状況を確認してください。');
+          return;
+        }
+        this.lastSent = this.now();
+        await this.call('send-generated', {sessionKey: key, text: message.text, kind: message.kind, speechKind: message.kind === 'credit' ? '' : speechKind}); this.invalidate();
+        if (kind === 'automatic' || kind === 'credit') {this.automation.sent++; this.automation.message = message.kind === 'credit' ? '音声クレジットを送信しました。' : '自動コメントを送信しました。';}
+      }
     });
-    this.outbox = result.catch(error => { if(error.status===429)this.blockedUntil=Math.max(this.blockedUntil,this.now()+Math.min(3600000,Math.max(30000,(Number(error.retryAfter)||30)*1000))); if (kind === 'automatic') {this.automation.failed++; this.automation.message = error.message;} }).finally(() => {this.queued--;});
+    this.outbox = result.catch(error => { if(error.status===429)this.blockedUntil=Math.max(this.blockedUntil,this.now()+Math.min(3600000,Math.max(30000,(Number(error.retryAfter)||30)*1000))); if (kind === 'automatic' || kind === 'credit') {this.automation.failed++; this.automation.message = error.message;} }).finally(() => {this.queued--;});
     return result;
   }
   async tick() {
@@ -239,6 +333,7 @@ export class NativeRuntime {
       if (pending.length) try {await this.change(key, async (saved, runtime, current) => {
         for (const event of pending) {
           seen.add(event.id);
+          if (event.user) rememberVoiceCredits(saved, runtime, current, [event.user]);
           if (event.type === 'comment' && event.user) {
             const command = parseCommand(event.text);
             if (command && !isCommandEnabled(current.manager?.preferences?.commands, command.name)) continue;
@@ -258,7 +353,18 @@ export class NativeRuntime {
               if (current.manager?.preferences?.features?.chat) automatic.push({text: response, commandName: command.name});
             } else commandJobs.push({event, key});
           }
-          if (saved.automationPaused || event.isDj || !event.user) continue;
+          if (event.isDj || !event.user) continue;
+          if (event.type === 'entry' && settings.enabled !== false && settings.autoVoiceCredits !== false) {
+            let greeting = '';
+            const last = this.greetings.get(event.user.id) ?? -Infinity;
+            if (!saved.automationPaused && settings.autoGreeting?.enabled && this.now() - last >= (settings.autoGreeting.cooldownSeconds || 0) * 1000) {
+              greeting = automaticText(settings.autoGreeting.template, {name: event.user.name, title: session.live.title});
+              this.greetings.set(event.user.id, this.now());
+            }
+            automatic.push({text: {greeting}, kind: 'credit'});
+            continue;
+          }
+          if (saved.automationPaused) continue;
           let config;
           if (event.type === 'entry' && settings.autoGreeting?.enabled) {
             const last = this.greetings.get(event.user.id) ?? -Infinity;
@@ -271,7 +377,7 @@ export class NativeRuntime {
         }
       });} catch(error) {for (const event of pending) seen.delete(event.id); throw error;}
       if (seen.size > 12000) this.seen.set(key, new Set(session.events.map(event => event.id)));
-      for (const message of automatic) void this.send(key, typeof message === 'string' ? message : message.text, 'automatic', '', message.commandName || '').catch(() => {});
+      for (const message of automatic) void this.send(key, typeof message === 'string' ? message : message.text, message.kind || 'automatic', '', message.commandName || '').catch(() => {});
       for (const job of commandJobs) this.commands.accept(job);
       if (this.portalStatus.running) await this.syncPortal(await this.snapshot(true));
       this.automation.paused = session.automationPaused === true;
@@ -289,7 +395,7 @@ export class NativeRuntime {
     const profile = runtime.profiles[user.id] ||= {name: user.name, counters: {}};
     profile.name = user.name; profile.updatedAt = this.now(); profile.counters = {...Object.fromEntries(counterNames.map(key => [key, 0])), ...profile.counters};
     const djOnly = () => {if (!event.isDj) throw new Error('この操作はDJ専用です。');};
-    let voices = list(raw.runtime?.voices).length ? raw.runtime.voices : LEGACY_VOICES;
+    let voices = voiceCatalog(raw).filter(voice => voiceEnabled(voice.id, raw.settings));
     const mine = session.users.find(item => item.id === user.id) || {};
     if (name === 'help') return helpMessage(args, raw.manager.preferences.commands.cooldownSeconds);
     if (name === 'stats') return `${session.live.title}\nコメント ${session.totals.comments} / ハート ${session.totals.hearts} / スプーン ${session.totals.spoons}\n検出 ${session.users.length}人`;
@@ -317,8 +423,12 @@ export class NativeRuntime {
       const provider = raw.settings?.provider;
       const engineUrl = raw.settings?.engineUrl;
       const catalogMatchesSettings = list(raw.runtime?.voices).length > 0 && raw.runtime?.voiceProvider === provider &&
-        (provider !== 'engine' || raw.runtime?.voiceEngineUrl === engineUrl);
-      if (!catalogMatchesSettings) voices = LEGACY_VOICES;
+        (provider !== 'engine' || raw.runtime?.voiceEngineUrl === engineUrl) &&
+        (raw.runtime?.voiceCoeiroinkEnabled === true) === (raw.settings?.coeiroinkEnabled === true) &&
+        (!raw.settings?.coeiroinkEnabled || raw.runtime?.voiceCoeiroinkUrl === raw.settings?.coeiroinkUrl) &&
+        (raw.runtime?.voiceCoeiroinkDirectEnabled === true) === (raw.settings?.coeiroinkDirectEnabled === true) &&
+        (!raw.settings?.coeiroinkDirectEnabled || raw.runtime?.voiceCoeiroinkDirectUrl === raw.settings?.coeiroinkDirectUrl);
+      if (!catalogMatchesSettings) voices = provider === 'builtin' ? BUILTIN_VOICES : LEGACY_VOICES;
       if (!catalogMatchesSettings) {
         try {
           const refreshed = await this.call('voice-catalog', {});
@@ -327,17 +437,24 @@ export class NativeRuntime {
             runtime.voices = voices;
             runtime.voiceProvider = provider;
             runtime.voiceEngineUrl = engineUrl;
+            runtime.voiceCoeiroinkEnabled = raw.settings?.coeiroinkEnabled === true;
+            runtime.voiceCoeiroinkUrl = raw.settings?.coeiroinkUrl;
+            runtime.voiceCoeiroinkDirectEnabled = raw.settings?.coeiroinkDirectEnabled === true;
+            runtime.voiceCoeiroinkDirectUrl = raw.settings?.coeiroinkDirectUrl;
           }
         } catch {}
       }
-      if (args[0]?.toLowerCase() === 'list') return voiceListMessage(voices, args[1]);
+      // Refresh results and fallback catalogs must pass the same consent gate.
+      voices = voices.filter(voice => voiceEnabled(voice.id, raw.settings));
+      if (args[0]?.toLowerCase() === 'list') return voiceListMessage(voices, args[1], notificationVoiceIds(voices, raw.settings.systemSpeaker));
       if (args.length) {
         const result = resolveVoice(voices, args.join(' '), notificationVoiceIds(voices, raw.settings.systemSpeaker));
         if (!result.voice) return result.message;
         runtime.assignments[user.id] = result.voice.id;
       }
       const speaker = assignedSpeaker({...raw, runtime}, user.id);
-      return `${user.name}さんの声：${voices.find(voice => voice.id === speaker)?.name || speaker}`;
+      const choice = voiceChoices(voices).find(choice => choice.voice.id === speaker);
+      return `${user.name}さんの声：${choice?.voice.name || speaker}${choice ? `\n番号: ${choice.code}` : ''}`;
     }
     if (name === 'dice') {
       const match = /^(\d{1,2})d(\d{1,3})$/i.exec(args[0] || '1d6');

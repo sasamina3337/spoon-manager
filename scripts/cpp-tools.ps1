@@ -85,8 +85,15 @@ try {
     $env:VSLANG = '1033'
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
     if (!(Test-Path -LiteralPath $vswhere)) { throw 'Install Microsoft C++ Build Tools (Desktop development with C++).' }
-    $installation = (& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
-    if (!$installation) { throw 'MSVC x64 was not found.' }
+    # Resolve the same Visual Studio family as the shared CMake presets.
+    $presetFile = Join-Path $projectRoot 'CMakePresets.json'
+    $presetConfig = Get-Content -Raw -Encoding UTF8 $presetFile | ConvertFrom-Json
+    $generator = ($presetConfig.configurePresets | Where-Object name -eq 'windows-base').generator
+    if ($generator -notmatch '^Visual Studio (\d+) ') { throw 'Unsupported CMake Visual Studio generator.' }
+    $vsMajor = [int]$matches[1]
+    $vsRange = "[$vsMajor.0,$($vsMajor + 1).0)"
+    $installation = (& $vswhere -latest -version $vsRange -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1)
+    if (!$installation) { throw "$generator C++ Build Tools (MSVC x64) was not found." }
     $devcmd = Join-Path $installation 'Common7/Tools/VsDevCmd.bat'
     if ($devcmd -match '["%!\r\n]') { throw 'Unsupported Build Tools path.' }
     $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/Lib'
@@ -125,13 +132,23 @@ try {
     $presetFile = Join-Path $projectRoot 'CMakePresets.json'
     $presetStamp = Join-Path $projectRoot ".local/build/$preset/preset.sha256"
     $presetHash = (Get-FileHash -LiteralPath $presetFile -Algorithm SHA256).Hash
+    $fresh = $false
+    if (Test-Path -LiteralPath $cache) {
+        $cached = [IO.File]::ReadAllText($cache)
+        $fresh = $cached -notmatch ('(?m)^CMAKE_GENERATOR:INTERNAL=' + [regex]::Escape($generator) + '\r?$')
+        if ($cached -match '(?m)^CMAKE_GENERATOR_INSTANCE:INTERNAL=([^\r\n]+)') {
+            $fresh = $fresh -or !(Test-Path -LiteralPath $matches[1])
+        }
+    }
     # CMake regenerates when CMakeLists or included CMake files change.
     # Reapply the preset explicitly only for first configuration or preset edits.
-    $configure = $command -eq 'configure' -or !(Test-Path -LiteralPath $cache)
+    $configure = $fresh -or $command -eq 'configure' -or !(Test-Path -LiteralPath $cache)
     if (!$configure) { $configure = !(Test-Path -LiteralPath $presetStamp) -or [IO.File]::ReadAllText($presetStamp) -ne $presetHash }
     if (!(Test-Path -LiteralPath (Join-Path $projectRoot ".local/build/$preset/SpoonManager.slnx")) -and !(Test-Path -LiteralPath (Join-Path $projectRoot ".local/build/$preset/SpoonManager.sln"))) { $configure = $true }
     if ($configure) {
-        & cmake --preset $preset
+        $configureArguments = @('--preset', $preset)
+        if ($fresh) { $configureArguments += '--fresh' }
+        & cmake @configureArguments
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         [IO.File]::WriteAllText($presetStamp, $presetHash)
     }

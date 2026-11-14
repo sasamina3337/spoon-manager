@@ -33,9 +33,22 @@ jsdom・Node.js・CMake・コンパイラーはバイナリ配布物に含めま
 
 Microsoft Edge WebView2 Evergreen Runtime は利用者が別途導入します。
 
+## 内蔵VOICEVOXと音声モデル
+
+VOICEVOX CORE 0.17.1（MIT）、VOICEVOX ONNX Runtime 1.17.3（専用規約と依存ライセンス）、Open JTalk辞書1.11（付属COPYING）と、確認済みのVVM 0.17.1をバイナリ配布物に同梱します。モデルのアプリ組み込み再配布は[音声モデル規約](https://github.com/VOICEVOX/voicevox_vvm/blob/0.17.1/TERMS.txt)に基づきます。モデル・生成音声には本アプリのMITを適用しません。
+
+利用可能な内蔵音声のクレジット: VOICEVOX:四国めたん、VOICEVOX:ずんだもん、VOICEVOX:春日部つむぎ、VOICEVOX:雨晴はう、VOICEVOX:冥鳴ひまり、VOICEVOX:九州そら、VOICEVOX:波音リツ、VOICEVOX:中国うさぎ、VOICEVOX:白上虎太郎、VOICEVOX:あんこもん、VOICEVOX Nemo、VOICEVOX:玄野武宏、VOICEVOX:剣崎雌雄、VOICEVOX:WhiteCUL、VOICEVOX:ちび式じい、VOICEVOX:櫻歌ミコ、VOICEVOX:†聖騎士 紅桜†、VOICEVOX:雀松朱司、VOICEVOX:麒ヶ島宗麟、VOICEVOX:春歌ナナ、VOICEVOX:栗田まろん、VOICEVOX:あいえるたん、VOICEVOX:満別花丸、VOICEVOX:小夜/SAYO、VOICEVOX:中部つるぎ、VOICEVOX 離途、VOICEVOX:黒沢冴白、VOICEVOX:東北ずん子、VOICEVOX:東北きりたん、VOICEVOX:東北イタコ、VOICEVOX:夜語トバリ、VOICEVOX:暁記ミタマ、VOICEVOX:ブイブイ・コバコ。
+
+[モデル別確認記録](licenses/VOICEVOX-MODEL-REVIEW.md)に採用・保留の理由と個別規約リンクを記載しています。[manifest](licenses/voicevox-manifest.json)で取得元、バージョン、SHA-256、話者とスタイルを固定します。配布物の `voicevox/licenses/` に上流の規約と辞書の表示、ONNX Runtimeの第三者表示、確認記録を保持します。COREの固定ソースに対応する本番・ビルド依存309パッケージ（Windows向けのCargo機能統合により、実際にリンクされた範囲より広い）とRust 1.96.0標準ランタイムの表示を `licenses/voicevox-core-dependencies.txt` に、取得元・チェックサム・収録ファイルを対応するJSONに収録します。開発専用の収集処理はNode.js/Cargoを使いますが、アプリのビルド・起動はそれらに依存しません。
+
+追加条件への同意後の音声のクレジット: VOICEVOX:No.7、VOICEVOX:後鬼、VOICEVOX:青山龍星、VOICEVOX もち子さん(cv明日葉よもぎ)、VOICEVOX:猫使アル、VOICEVOX:猫使ビィ、VOICEVOX:琴詠ニア、VOICEVOX:Voidoll(CV:丹下桜)、VOICEVOX:ぞん子、VOICEVOX:ユーレイちゃん(CV:神崎零)。追加40スタイルは既定では利用不可で、設定OFFへの切り替え時に規約リンク・注意点と2項目の同意を確認します。利用区分は「個人・非商用」または「必要な連絡・許諾を対応済み」から選択します。商用・法人等で必要な連絡・許諾は利用者が対応し、この確認画面自体が権利者の許諾を与えるものではありません。
+
+内蔵音声の初回利用前に、設定画面で個別規約とクレジットを確認します。配信・録画のクレジットは利用者がプロフィール・概要欄等へ掲載してください。アプリ内の表示だけでは配信側の表示義務を満たしません。設定画面に追加音声を含む同梱音声と取得済み候補のクレジットとコピー機能を設けています。
+
 ## 外部サービス・音声・データ
 
 - Spoon API の利用には、Spoon の利用規約、開発者向け条件、利用者の同意が適用されます。本体の MIT ライセンスは API の利用許諾や Spoon の商標使用許諾を与えるものではありません。
-- VOICEVOX、選択した音声ライブラリ・話者、tts.quest の利用条件やクレジット表記は、それぞれの提供元の条件に従ってください。音声エンジンや音声モデルを本リポジトリで配布するものではありません。
+- 外部VOICEVOX、選択した音声ライブラリ・話者、tts.quest の利用条件やクレジット表記は、それぞれの提供元の条件に従ってください。内蔵するモデルと外部エンジンの追加話者は区別し、外部話者の利用許諾を本アプリが与えるものではありません。
+- 任意のCOEIROINK連携は、本体のAPIへ直接接続するか、利用者がVOICEVOXに追加した [COEIROINK v2 bridge](https://github.com/sevenc-nanashi/coeiroink-v2-bridge) に接続します。ブリッジ・COEIROINK本体・音声モデルは同梱しません。COEIROINKと各音声の利用条件・クレジット表記は提供元の条件に従ってください。
 - Open-Meteo、GeoNames、国土地理院のデータには、それぞれの利用条件と出典表示の条件が適用されます。商用利用や API 利用枠についても各提供元の条件を確認してください。
 - Cloudflare のトンネルサービス利用には、ソフトウェアの Apache-2.0 ライセンスとは別に、サービスの利用条件が適用されます。

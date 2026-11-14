@@ -1,7 +1,9 @@
-import { DEFAULT_SETTINGS, LEGACY_VOICES, normalizeSettings, notificationVoiceIds } from '../shared/settings.js';
+import { DEFAULT_SETTINGS, LEGACY_VOICES, normalizeSettings, notificationVoiceIds, voiceId, isVoiceId, isCoeiroinkVoice, voiceEnabled } from '../shared/settings.js';
 import {send, notice as showNotice} from '../shared/ui.js';
 import {AudioOutputUI} from './audio-output.js';
 import {nativeAudioDevices} from '../services/audio.js';
+import {BUILTIN_VOICES, VOICE_TERMS_REVISION, ADDITIONAL_VOICE_TERMS_REVISION, additionalVoicesAccepted} from '../shared/builtin-voices.js';
+import {speechCredits} from '../shared/speech-credits.js';
 
 const $ = (id) => document.getElementById('v-' + id);
 const nativeOutputs = nativeAudioDevices();
@@ -17,7 +19,7 @@ export const settingsUI = {
   pool: selectedPool,
   reset() { editRevision++; renderSettings(savedSettings); },
   restoreDraft(pool) {
-    if (pool) for (const input of $('voice-pool').querySelectorAll('input')) input.checked = !input.disabled && pool.includes(Number(input.value));
+    if (pool) for (const input of $('voice-pool').querySelectorAll('input')) input.checked = !input.disabled && pool.includes(voiceId(input.value));
     showProvider(); showSpoonSource(); updateRanges(); updatePoolCount(); updateGreeting(); markDirty();
   }
 };
@@ -32,6 +34,8 @@ let catalogFetched = false;
 let lastParticipants = [];
 let participantSignature = '';
 let displayedApiError = '';
+let additionalVoiceTermsAccepted = '';
+let additionalVoiceUse = '';
 
 function markDirty() {
   editRevision++;
@@ -43,9 +47,63 @@ function markDirty() {
 
 function showProvider() {
   const engine = $('provider').value === 'engine';
+  const builtin = $('provider').value === 'builtin';
   $('engine-fields').hidden = !engine;
-  $('legacy-fields').hidden = engine;
+  $('legacy-fields').hidden = $('provider').value !== 'legacy';
+  $('builtin-fields').hidden = !builtin;
   $('engine-url').disabled = !engine;
+  $('coeiroink-fields').hidden = !$('coeiroink-enabled').checked;
+  $('coeiroink-url').disabled = !$('coeiroink-enabled').checked;
+  const bridge = $('coeiroink-enabled').checked;
+  const direct = $('coeiroink-direct-enabled').checked;
+  $('coeiroink-enabled').disabled = direct;
+  $('coeiroink-direct-enabled').disabled = bridge;
+  $('coeiroink-direct-fields').hidden = !direct;
+  $('coeiroink-direct-url').disabled = !direct;
+  $('coeiroink-bridge-status').textContent = direct ? '直接API接続がONです。ブリッジに切り替えるには、先に直接API接続をOFFにしてください。' : '';
+  $('coeiroink-direct-status').textContent = bridge ? 'ブリッジがONです。直接API接続に切り替えるには、先にブリッジをOFFにしてください。' : '';
+  $('coeiroink-test').disabled = bridge || !direct || !savedSettings.coeiroinkDirectEnabled;
+  renderCredits();
+}
+
+function renderCredits() {
+  $('speech-credits').value = speechCredits(voices);
+  if (!$('model-terms').children.length) {
+    const seen = new Set();
+    for (const voice of BUILTIN_VOICES) {
+      if (seen.has(voice.credit)) continue;
+      seen.add(voice.credit);
+      const item = document.createElement('li'), link = document.createElement('a');
+      link.href = voice.terms; link.target = '_blank'; link.rel = 'noopener'; link.textContent = voice.credit;
+      item.append(link, document.createTextNode(`：${voice.requiresAdditionalConsent ? '【利用条件の追加確認が必要】' : ''}${voice.note}`));
+      $('model-terms').append(item);
+    }
+  }
+}
+
+function draftVoiceSettings() {
+  return {provider: $('provider').value, coeiroinkEnabled: $('coeiroink-enabled').checked, coeiroinkDirectEnabled: $('coeiroink-direct-enabled').checked,
+    avoidRestrictedVoices: $('avoid-restricted-voices').checked, additionalVoiceTermsAccepted, additionalVoiceUse};
+}
+
+function renderAdditionalVoiceStatus() {
+  $('additional-voice-status').textContent = additionalVoicesAccepted(draftVoiceSettings()) ?
+    `追加音声40スタイルを選べます。確認区分：${additionalVoiceUse === 'licensed' ? '必要な連絡・許諾を対応済み' : '個人・非商用'}。設定を保存すると反映されます。` :
+    '追加音声40スタイルを選択・合成の対象から外しています。';
+}
+
+function updateAdditionalVoices() {
+  renderVoices(voiceId($('system-speaker').value), selectedPool());
+  renderAdditionalVoiceStatus();
+  markDirty();
+}
+
+function cancelAdditionalVoices() {
+  $('avoid-restricted-voices').checked = true;
+  additionalVoiceTermsAccepted = '';
+  additionalVoiceUse = '';
+  $('additional-voice-dialog').close();
+  updateAdditionalVoices();
 }
 
 function showSpoonSource() {
@@ -76,7 +134,7 @@ function updateRanges() {
 }
 
 function selectedPool() {
-  return [...$('voice-pool').querySelectorAll('input:checked')].map((input) => Number(input.value));
+  return [...$('voice-pool').querySelectorAll('input:checked')].map((input) => voiceId(input.value));
 }
 
 function updatePoolCount() {
@@ -91,23 +149,29 @@ function voiceOption(voice) {
 }
 
 function availableVoices(extraIds = []) {
-  const result = [...voices];
-  const known = new Set(result.map((voice) => Number(voice.id)));
+  const settings = draftVoiceSettings();
+  const catalog = settings.provider === 'builtin' ? [...BUILTIN_VOICES, ...voices.filter(voice => isCoeiroinkVoice(voice.id))] : voices;
+  const result = catalog.filter(voice => voiceEnabled(voice.id, settings));
+  const known = new Set(result.map((voice) => voice.id));
   for (const id of extraIds) {
-    if (Number.isFinite(Number(id)) && !known.has(Number(id))) {
-      result.push({ id: Number(id), name: `話者 ID ${id}` });
-      known.add(Number(id));
+    if (isVoiceId(id) && voiceEnabled(id, settings) && !known.has(id)) {
+      result.push({ id, name: `話者 ID ${id}` });
+      known.add(id);
     }
   }
   return result;
 }
 
 function renderVoices(systemSpeaker, commentSpeakers) {
+  if (!voiceEnabled(systemSpeaker, draftVoiceSettings())) systemSpeaker = DEFAULT_SETTINGS.systemSpeaker;
   const list = availableVoices([systemSpeaker, ...commentSpeakers]);
   $('system-speaker').replaceChildren(...list.map(voiceOption));
   $('system-speaker').value = String(systemSpeaker);
-  const selected = new Set(commentSpeakers.map(Number));
+  const selected = new Set(commentSpeakers);
   const reserved = notificationVoiceIds(list, systemSpeaker);
+  if (commentSpeakers.length && !commentSpeakers.some(id => voiceEnabled(id, draftVoiceSettings()) && !reserved.includes(id))) {
+    for (const voice of list) if (!reserved.includes(voice.id)) selected.add(voice.id);
+  }
   const fragment = document.createDocumentFragment();
   for (const voice of list) {
     const label = document.createElement('label');
@@ -116,7 +180,7 @@ function renderVoices(systemSpeaker, commentSpeakers) {
     input.type = 'checkbox';
     input.value = String(voice.id);
     input.disabled = reserved.includes(voice.id);
-    input.checked = !input.disabled && selected.has(Number(voice.id));
+    input.checked = !input.disabled && selected.has(voice.id);
     const text = document.createElement('span');
     text.textContent = voice.name + (input.disabled ? '（通知専用）' : '');
     label.append(input, text);
@@ -129,8 +193,20 @@ function renderVoices(systemSpeaker, commentSpeakers) {
 function renderSettings(settings) {
   savedSettings = normalizeSettings(settings);
   $('provider').value = savedSettings.provider;
+  $('voice-terms').checked = savedSettings.voiceTermsAccepted === VOICE_TERMS_REVISION;
+  $('auto-voice-credits').checked = savedSettings.autoVoiceCredits;
+  $('credit-off-warning').hidden = savedSettings.autoVoiceCredits;
+  additionalVoiceTermsAccepted = savedSettings.additionalVoiceTermsAccepted;
+  additionalVoiceUse = savedSettings.additionalVoiceUse;
+  $('avoid-restricted-voices').checked = savedSettings.avoidRestrictedVoices;
+  if ($('additional-voice-dialog').open) $('additional-voice-dialog').close();
+  renderAdditionalVoiceStatus();
   $('api-key').value = savedSettings.apiKey;
   $('engine-url').value = savedSettings.engineUrl;
+  $('coeiroink-enabled').checked = savedSettings.coeiroinkEnabled;
+  $('coeiroink-url').value = savedSettings.coeiroinkUrl;
+  $('coeiroink-direct-enabled').checked = savedSettings.coeiroinkDirectEnabled;
+  $('coeiroink-direct-url').value = savedSettings.coeiroinkDirectUrl;
   $('enabled').checked = savedSettings.enabled;
   $('spoon-source').value = savedSettings.spoonSource;
   $('spoon-bridge-url').value = savedSettings.spoonBridgeUrl;
@@ -166,13 +242,17 @@ function applySavedState(state, revisionAtStart) {
   if (Array.isArray(state.voices) && state.voices.length) voices = state.voices;
   if (state.settings) savedSettings = normalizeSettings(state.settings);
   if (editRevision === revisionAtStart) renderSettings(savedSettings);
-  else renderVoices(Number($('system-speaker').value), selectedPool());
+  else renderVoices(voiceId($('system-speaker').value), selectedPool());
   renderStatus(state.status);
   renderSpoonStatus(state.spoonStatus);
   renderParticipants(state.participants, state.roomKey);
 }
 
 function collectSettings() {
+  if (!$('avoid-restricted-voices').checked && !additionalVoicesAccepted(draftVoiceSettings()))
+    throw new Error('追加音声の規約と利用区分を確認して、同意してください。');
+  if ($('provider').value === 'builtin' && $('enabled').checked && !$('voice-terms').checked)
+    throw new Error('内蔵音声の利用規約とクレジットを確認して、確認欄にチェックしてください。');
   if (selectedPool().length === 0) throw new Error('コメントに使う声を 1 つ以上選んでください。');
   const engineUrl = $('provider').value === 'engine' ? $('engine-url').value.trim() : savedSettings.engineUrl;
   if ($('provider').value === 'engine') {
@@ -185,9 +265,18 @@ function collectSettings() {
   return normalizeSettings({
     ...savedSettings,
     provider: $('provider').value,
+    voiceTermsAccepted: $('voice-terms').checked ? VOICE_TERMS_REVISION : '',
+    autoVoiceCredits: $('auto-voice-credits').checked,
+    avoidRestrictedVoices: $('avoid-restricted-voices').checked,
+    additionalVoiceTermsAccepted,
+    additionalVoiceUse,
     apiKey: $('api-key').value.trim(),
     engineUrl,
-    systemSpeaker: Number($('system-speaker').value),
+    coeiroinkEnabled: $('coeiroink-enabled').checked,
+    coeiroinkUrl: $('coeiroink-url').value.trim(),
+    coeiroinkDirectEnabled: $('coeiroink-direct-enabled').checked,
+    coeiroinkDirectUrl: $('coeiroink-direct-url').value.trim(),
+    systemSpeaker: voiceId($('system-speaker').value),
     commentSpeakers: selectedPool(),
     speed: Number($('speed').value),
     volume: Number($('volume').value),
@@ -210,7 +299,8 @@ function collectSettings() {
 
 function renderStatus(status = {}) {
   const queued = Number(status.queued) || 0;
-  const unconfigured = savedSettings.provider === 'legacy' && !savedSettings.apiKey;
+  const coeiroink = isCoeiroinkVoice(savedSettings.systemSpeaker) && voiceEnabled(savedSettings.systemSpeaker, savedSettings);
+  const unconfigured = !coeiroink && savedSettings.provider === 'legacy' && !savedSettings.apiKey;
   $('playback-status').textContent = status.lastError ? (/HTTP 5\d\d/.test(status.lastError) ? '音声サービスでエラー' : '接続を確認してください') : status.enabled === false ? '読み上げは無効です' : unconfigured ? '「読み上げ」で音声APIキーを設定' : status.playing ? `読み上げ中${queued ? ` · 待機 ${queued} 件` : ''}` : queued ? `${queued} 件の読み上げを待機中` : 'コメントを待っています';
   $('status-dot').classList.toggle('active', status.enabled !== false && !status.lastError && !unconfigured);
   $('status-dot').classList.toggle('error', Boolean(status.lastError));
@@ -243,14 +333,14 @@ function renderParticipants(participants = [], roomKey) {
     const select = document.createElement('select');
     select.setAttribute('aria-label', `${participant.name} さんの声`);
     const reserved = notificationVoiceIds(voices, savedSettings.systemSpeaker);
-    select.append(...availableVoices([participant.speaker]).filter(voice => !reserved.includes(voice.id)).map(voiceOption));
+    select.append(...availableVoices([participant.speaker]).filter(voice => voiceEnabled(voice.id, savedSettings) && !reserved.includes(voice.id)).map(voiceOption));
     select.disabled = !select.options.length;
     select.value = String(participant.speaker);
     select.addEventListener('change', async () => {
       select.disabled = true;
       try {
-        await send('SET_ASSIGNMENT', { tabId, userId: participant.id, speaker: Number(select.value) });
-        participant.speaker = Number(select.value);
+        await send('SET_ASSIGNMENT', { tabId, userId: participant.id, speaker: voiceId(select.value) });
+        participant.speaker = voiceId(select.value);
         showNotice(`${participant.name} さんの声を変更しました。`);
       } catch (error) {
         select.value = String(participant.speaker);
@@ -279,15 +369,73 @@ async function runAction(button, action) {
   busy = true;
   button.disabled = true;
   try { await action(); } catch (error) { showNotice(error.message, true); }
-  finally { busy = false; button.disabled = false; }
+  finally { busy = false; button.disabled = false; showProvider(); }
 }
 
 $('settings-form').addEventListener('input', () => { markDirty(); updateRanges(); updatePoolCount(); updateGreeting(); });
 $('enabled').addEventListener('change', markDirty);
-$('provider').addEventListener('change', showProvider);
+$('auto-voice-credits').addEventListener('change', () => {
+  $('credit-off-warning').hidden = $('auto-voice-credits').checked;
+  markDirty();
+});
+$('avoid-restricted-voices').addEventListener('change', () => {
+  additionalVoiceTermsAccepted = '';
+  additionalVoiceUse = '';
+  if ($('avoid-restricted-voices').checked) { updateAdditionalVoices(); return; }
+  // Keep the gate closed until both confirmations are accepted.
+  $('avoid-restricted-voices').checked = true;
+  $('additional-use-confirm').checked = false;
+  $('additional-rules-confirm').checked = false;
+  $('additional-use-personal').checked = false;
+  $('additional-use-licensed').checked = false;
+  $('additional-voice-accept').disabled = true;
+  const seen = new Set();
+  $('additional-model-terms').replaceChildren();
+  for (const voice of BUILTIN_VOICES.filter(v => v.requiresAdditionalConsent)) {
+    if (seen.has(voice.speaker)) continue;
+    seen.add(voice.speaker);
+    const item = document.createElement('li'), link = document.createElement('a');
+    link.href = voice.terms; link.target = '_blank'; link.rel = 'noopener'; link.textContent = voice.credit;
+    item.append(link, document.createTextNode(`：${voice.note}`));
+    $('additional-model-terms').append(item);
+  }
+  $('additional-voice-dialog').showModal();
+});
+for (const id of ['additional-use-confirm', 'additional-rules-confirm', 'additional-use-personal', 'additional-use-licensed']) $(id).addEventListener('change', () => {
+  $('additional-voice-accept').disabled = !$('additional-use-confirm').checked || !$('additional-rules-confirm').checked ||
+    (!$('additional-use-personal').checked && !$('additional-use-licensed').checked);
+});
+$('additional-voice-cancel').addEventListener('click', cancelAdditionalVoices);
+$('additional-voice-dialog').addEventListener('cancel', event => { event.preventDefault(); cancelAdditionalVoices(); });
+$('additional-voice-accept').addEventListener('click', () => {
+  if (!$('additional-voice-dialog').open || !$('additional-use-confirm').checked || !$('additional-rules-confirm').checked) return;
+  if (!$('additional-use-personal').checked && !$('additional-use-licensed').checked) return;
+  additionalVoiceUse = $('additional-use-licensed').checked ? 'licensed' : 'personalNoncommercial';
+  additionalVoiceTermsAccepted = ADDITIONAL_VOICE_TERMS_REVISION;
+  $('avoid-restricted-voices').checked = false;
+  $('additional-voice-dialog').close();
+  updateAdditionalVoices();
+});
+$('provider').addEventListener('change', () => {
+  const speaker = voiceId($('system-speaker').value);
+  const pool = selectedPool().filter(id => voiceEnabled(id, draftVoiceSettings()));
+  renderVoices(voiceEnabled(speaker, draftVoiceSettings()) ? speaker : DEFAULT_SETTINGS.systemSpeaker,
+    pool.length ? pool : BUILTIN_VOICES.filter(v => v.id !== DEFAULT_SETTINGS.systemSpeaker).map(v => v.id));
+  showProvider();
+});
+$('copy-credits').addEventListener('click', () => runAction($('copy-credits'), async () => {
+  const value = $('speech-credits').value;
+  try { await navigator.clipboard.writeText(value); $('credit-status').textContent = 'コピーしました。配信プロフィール・概要欄等に貼り付けてください。'; }
+  catch { $('speech-credits').focus(); $('speech-credits').select(); $('credit-status').textContent = 'コピーできませんでした。選択した表記をCtrl+Cでコピーしてください。'; }
+}));
+for (const name of ['coeiroink-enabled', 'coeiroink-direct-enabled']) $(name).addEventListener('change', () => {
+  showProvider();
+  renderVoices(voiceId($('system-speaker').value), selectedPool());
+  markDirty();
+});
 $('spoon-source').addEventListener('change', showSpoonSource);
 $('system-speaker').addEventListener('change', () => {
-  renderVoices(Number($('system-speaker').value), selectedPool());
+  renderVoices(voiceId($('system-speaker').value), selectedPool());
   markDirty();
 });
 $('show-key').addEventListener('click', () => {
@@ -314,8 +462,11 @@ $('settings-form').addEventListener('submit', (event) => {
     settings = collectSettings();
     preferences = integration.collectPreferences();
     preferencesRevision = integration.preferencesRevision();
-    shouldFetch = catalogSupported && settings.enabled && (settings.provider === 'engine' || Boolean(settings.apiKey)) && (!catalogFetched || settings.provider !== savedSettings.provider ||
-      settings.apiKey !== savedSettings.apiKey || settings.engineUrl !== savedSettings.engineUrl);
+    shouldFetch = catalogSupported && settings.enabled && (settings.provider === 'builtin' || settings.provider === 'engine' || Boolean(settings.apiKey) || settings.coeiroinkDirectEnabled) && (!catalogFetched || settings.provider !== savedSettings.provider ||
+      settings.avoidRestrictedVoices !== savedSettings.avoidRestrictedVoices || settings.additionalVoiceTermsAccepted !== savedSettings.additionalVoiceTermsAccepted || settings.additionalVoiceUse !== savedSettings.additionalVoiceUse ||
+      settings.apiKey !== savedSettings.apiKey || settings.engineUrl !== savedSettings.engineUrl || settings.coeiroinkEnabled !== savedSettings.coeiroinkEnabled ||
+      (settings.coeiroinkEnabled && settings.coeiroinkUrl !== savedSettings.coeiroinkUrl) || settings.coeiroinkDirectEnabled !== savedSettings.coeiroinkDirectEnabled ||
+      (settings.coeiroinkDirectEnabled && settings.coeiroinkDirectUrl !== savedSettings.coeiroinkDirectUrl));
   } catch (error) { showNotice(error.message, true); return; }
   runAction($('save'), async () => {
     const result = await send('SAVE_APP_SETTINGS', { settings, preferences, tabId, sessionKey: integration.sessionKey() });
@@ -348,13 +499,25 @@ $('test').addEventListener('click', () => runAction($('test'), async () => {
     await refreshState();
   } catch (error) { status.textContent = error.message; status.classList.add('error'); throw error; }
 }));
+for (const source of ['voicevox', 'coeiroink']) $(source + '-test').addEventListener('click', () => runAction($(source + '-test'), async () => {
+  const status = $(source + '-test-status');
+  status.classList.remove('error');
+  status.textContent = dirty ? '保存済みの設定でテストしています。未保存の変更は反映されません。' : '保存済みの接続先と出力先で再生しています…';
+  try {
+    await send('TEST_VOICE', {source});
+    status.textContent = '音声テストが完了しました。';
+    showNotice(status.textContent);
+    await refreshState();
+  } catch (error) { status.textContent = error.message; status.classList.add('error'); throw error; }
+  finally { showProvider(); }
+}));
 $('diagnose-speech').addEventListener('click', () => runAction($('diagnose-speech'), async () => {
   $('speech-diagnostic').hidden = false;
   $('speech-diagnostic').textContent = '保存済み設定で音声APIへの接続と短文の音声合成を確認しています…';
   try {
     const {diagnostic} = await send('DIAGNOSE_SPEECH');
     const stages = {voices: '声の一覧', query: '音声クエリ', audio_query: '音声クエリ', synthesis: '音声合成'};
-    const checks = diagnostic.requests.map(item => `${stages[item.stage] || '音声API'}：${item.status ? `HTTP ${item.status}` : '通信失敗'}`).join('\n');
+    const checks = diagnostic.requests.map(item => item.local ? '内蔵VOICEVOX：合成完了' : `${stages[item.stage] || '音声API'}：${item.status ? `HTTP ${item.status}` : '通信失敗'}`).join('\n');
     $('speech-diagnostic').textContent = `${new Date(diagnostic.checkedAt).toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})}\n${diagnostic.message}${checks ? `\n${checks}` : ''}`;
     $('speech-diagnostic').classList.toggle('error', !diagnostic.ok);
     showNotice(diagnostic.ok ? '現在の音声APIは正常に応答しました。' : diagnostic.message, !diagnostic.ok);
@@ -378,7 +541,7 @@ $('refresh-voices').addEventListener('click', () => runAction($('refresh-voices'
   const revisionAtStart = editRevision;
   const wasDirty = dirty;
   const result = await send('REFRESH_VOICES', { tabId });
-  const speaker = Number($('system-speaker').value);
+  const speaker = voiceId($('system-speaker').value);
   const pool = selectedPool();
   if (!Array.isArray(result.voices) || !result.voices.length) throw new Error('利用できる声が見つかりませんでした。API の設定を確認してください。');
   catalogFetched = true;

@@ -3,6 +3,7 @@
 #include "spoon/storage.hpp"
 #include "spoon/web_bridge.hpp"
 #include "spoon/http.hpp"
+#include "spoon/builtin_speech.hpp"
 #include <windows.h>
 #include <commdlg.h>
 #include <shellapi.h>
@@ -317,7 +318,18 @@ private:
             }).Get(), &token);
         view_->add_NewWindowRequested(Callback<ICoreWebView2NewWindowRequestedEventHandler>(
             [](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
-                args->put_Handled(TRUE); return S_OK;
+                args->put_Handled(TRUE);
+                BOOL initiated = FALSE; args->get_IsUserInitiated(&initiated);
+                LPWSTR uri = nullptr; args->get_Uri(&uri);
+                if (initiated && uri) {
+                    const std::wstring target(uri);
+                    bool allowed = target == L"https://coeiroink.com/terms" ||
+                        target == L"https://github.com/VOICEVOX/voicevox_vvm/blob/0.17.1/TERMS.txt";
+                    for (const auto& voice : builtin_voices())
+                        if (target == wide(voice.at("terms").get<std::string>())) allowed = true;
+                    if (allowed) ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
+                }
+                CoTaskMemFree(uri); return S_OK;
             }).Get(), &token);
         view_->add_PermissionRequested(Callback<ICoreWebView2PermissionRequestedEventHandler>(
             [](ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) -> HRESULT {
@@ -629,8 +641,12 @@ Object.defineProperty(window,'spoonNative',{value:Object.freeze({
                 } else if (task.operation == "save-csv") {
                     write_text_atomic(task.export_path, task.input.at("content").get<std::string>()); result = {{"cancelled", false}};
                 } else if (task.operation == "test-voice") {
-                    if (!task.input.empty()) throw std::runtime_error("音声テストの指定が不正です。");
-                    application_.test_voice(task.voice_cancel);
+                    if (task.input.is_object() && task.input.size() == 1 && task.input.contains("source") && task.input["source"].is_string())
+                        application_.test_voice_for(task.input["source"].get<std::string>(), task.voice_cancel);
+                    else {
+                        if (!task.input.is_object() || !task.input.empty()) throw std::runtime_error("音声テストの指定が不正です。");
+                        application_.test_voice(task.voice_cancel);
+                    }
                     result = nullptr;
                 } else if (task.operation == "diagnose-speech") {
                     if (!task.input.empty()) throw std::runtime_error("音声診断の指定が不正です。");

@@ -25,8 +25,18 @@ function Wait-OwnedProcess($Process, [int]$Milliseconds, [string]$Action = 'subp
 $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SpoonManagerDesktopCpp'
 $before = if (Test-Path -LiteralPath $registry) { (Get-ItemProperty -LiteralPath $registry | ConvertTo-Json -Compress) } else { '' }
 $process = Start-Process -FilePath ([IO.Path]::GetFullPath($Installer)) -ArgumentList ('/S /TESTMODE /D=' + $installPath) -WindowStyle Hidden -PassThru
-Wait-OwnedProcess $process 30000 'Setup'
+Wait-OwnedProcess $process 90000 'Setup'
 $installed = Join-Path $installPath 'SpoonManager.exe'
+foreach ($file in @('voicevox/runtime/voicevox_core.dll', 'voicevox/runtime/voicevox_onnxruntime.dll', 'voicevox/catalog.json', 'voicevox/licenses/TERMS.txt', 'voicevox/licenses/CORE-LICENSE.txt', 'voicevox/licenses/ONNX-TERMS.txt', 'voicevox/licenses/ONNX-third-party-notices.html', 'voicevox/licenses/OpenJTalk-dictionary-COPYING.txt', 'voicevox/licenses/VOICEVOX-MODEL-REVIEW.md', 'licenses/voicevox-core-dependencies.txt')) {
+    if (!(Test-Path -LiteralPath (Join-Path $installPath $file))) { throw "Missing installed speech dependency or license: $file" }
+}
+$voiceManifest = Get-Content -Raw -Encoding UTF8 (Join-Path $installPath 'voicevox/catalog.json') | ConvertFrom-Json
+$expectedModels = @($voiceManifest.models | Where-Object name -Match '\.vvm$')
+$actualModels = @(Get-ChildItem -LiteralPath (Join-Path $installPath 'voicevox/models') -File)
+if (@(Compare-Object @($expectedModels.name | Sort-Object) @($actualModels.Name | Sort-Object)).Count) { throw 'Unreviewed or missing installed voice model.' }
+foreach ($model in $expectedModels) {
+    if ((Get-FileHash -LiteralPath (Join-Path $installPath "voicevox/models/$($model.name)")).Hash -ine $model.sha256) { throw 'Installed voice model checksum mismatch.' }
+}
 foreach ($file in @('SpoonManager.exe', 'Uninstall.exe', 'vcruntime140.dll', 'msvcp140.dll', 'LICENSE', 'licenses/WebView2.txt', 'licenses/WebView2-NOTICE.txt', 'licenses/cloudflared-dependencies.txt', 'licenses/cloudflared-dependencies.json', 'licenses/go-runtime.txt', 'licenses/nsis.txt', 'licenses/microsoft-runtime.txt', 'licenses/nlohmann-json-components.txt', 'ui/popup/popup.html', 'ui/native-entry.js', 'ui/icons/reader.ico', 'ui/icons/reader.svg', 'ui/shared/spoon-permissions.js', 'documentation/Development.md')) {
     if (!(Test-Path -LiteralPath (Join-Path $installPath $file))) { throw "Missing installed payload: $file" }
 }
@@ -43,7 +53,7 @@ $sentinel = Join-Path $installPath 'preserve-test-user-file.txt'
 [IO.File]::WriteAllText($sentinel, 'installer-test-sentinel')
 $uninstaller = Join-Path $installPath 'Uninstall.exe'
 $process = Start-Process -FilePath $uninstaller -ArgumentList ('/S /TESTMODE _?=' + $installPath) -WindowStyle Hidden -PassThru
-Wait-OwnedProcess $process 30000 'uninstaller'
+Wait-OwnedProcess $process 90000 'uninstaller'
 if (Test-Path -LiteralPath $installed) { throw 'Uninstall did not remove the installed application.' }
 if (!(Test-Path -LiteralPath $sentinel)) { throw 'Uninstall removed an unknown file.' }
 if (!(Test-Path -LiteralPath (Join-Path $dataPath 'state.json'))) { throw 'Uninstall removed separate user data.' }

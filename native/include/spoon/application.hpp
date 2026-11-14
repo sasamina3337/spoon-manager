@@ -36,6 +36,7 @@ public:
                     const std::string& session_key);
     Json audio_devices() const;
     void test_voice(std::stop_token stop = {});
+    void test_voice_for(const std::string& source, std::stop_token stop = {});
     Json diagnose_speech(std::stop_token stop = {});
     void stop_audio();
     void set_status(const std::string& message);

@@ -3,6 +3,8 @@
 #endif
 #include "spoon/audio.hpp"
 #include "spoon/http.hpp"
+#include "spoon/voice.hpp"
+#include "spoon/builtin_speech.hpp"
 
 #include <windows.h>
 #include <mmsystem.h>
@@ -63,6 +65,8 @@ double number_setting(const Json& settings, const char* name, double fallback,
 }
 struct Settings {
     std::string provider, engine_url, key, speaker, device, label;
+    std::string speaker_uuid;
+    bool coeiroink = false;
     double speed = 1, volume = 1;
 };
 
@@ -115,21 +119,39 @@ std::string engine_base(std::string value) {
 Settings read_settings(const Json& settings) {
     if (!settings.is_object()) bad_settings();
     Settings result;
+    if (settings.value("coeiroinkEnabled", false) && settings.value("coeiroinkDirectEnabled", false)) bad_settings();
     result.provider = string_setting(settings, "provider", "engine");
-    if (result.provider != "engine" && result.provider != "legacy")
+    if (result.provider != "engine" && result.provider != "legacy" && result.provider != "builtin")
         throw AudioError(400, "選択した音声APIには対応していません。");
-    result.engine_url = string_setting(settings, "engineUrl", "http://127.0.0.1:50021");
+    const auto speaker = settings.value("systemSpeaker", Json(0));
+    const auto coeiroink = coeiroink_voice(speaker);
+    if (speaker.is_string() && !coeiroink) bad_settings();
+    if (coeiroink && settings.value("coeiroinkDirectEnabled", false)) {
+        result.provider = "coeiroink";
+        result.engine_url = engine_base(string_setting(settings, "coeiroinkDirectUrl", "http://127.0.0.1:50032"));
+        result.speaker = coeiroink->style;
+        result.speaker_uuid = coeiroink->uuid;
+    } else if (coeiroink && settings.value("coeiroinkEnabled", false)) {
+        result.coeiroink = true;
+        result.provider = "engine";
+        result.engine_url = string_setting(settings, "coeiroinkUrl", "http://127.0.0.1:50132");
+        result.speaker = coeiroink->style;
+    } else {
+        result.engine_url = string_setting(settings, "engineUrl", "http://127.0.0.1:50021");
+        if (!coeiroink && (!speaker.is_number_integer() || speaker.get<double>() < 0 || speaker.get<double>() > 9'007'199'254'740'991.0)) bad_settings();
+        result.speaker = coeiroink ? "0" : std::to_string(speaker.get<std::uint64_t>());
+    }
     if (result.provider == "engine") result.engine_url = engine_base(std::move(result.engine_url));
+    if (result.provider == "builtin") {
+        if (!builtin_terms_accepted(settings)) throw AudioError(400, "読み上げ設定で内蔵音声の利用規約とクレジットを確認してください。");
+        if (!builtin_voice_allowed(speaker, settings)) throw AudioError(400, "この内蔵音声は利用できません。読み上げ設定で音声の利用条件と同意を確認してください。");
+    }
     result.key = string_setting(settings, "apiKey");
     if (result.provider == "legacy" && result.key.empty()) throw AudioError(400, "音声APIキーを入力して設定を保存してください。");
     result.speed = number_setting(settings, "speed", 1, 0.5, 2);
     result.volume = number_setting(settings, "volume", 1, 0, 1);
     result.device = string_setting(settings, "outputDeviceId");
     result.label = string_setting(settings, "outputDeviceLabel");
-    const auto speaker = settings.find("systemSpeaker");
-    if (speaker != settings.end() && (!speaker->is_number_integer() ||
-        speaker->get<double>() < 0 || speaker->get<double>() > 9'007'199'254'740'991.0)) bad_settings();
-    result.speaker = speaker == settings.end() ? "0" : std::to_string(speaker->get<std::uint64_t>());
     return result;
 }
 
@@ -212,7 +234,7 @@ HttpResponse fetch(const audio_detail::SpeechRequest& request, std::stop_token s
     catch (const std::exception&) {
         check_stop(stop);
         if (requests) requests->push_back({{"stage", stage}, {"status", 0}});
-        throw AudioError(502, "音声APIに接続できません。接続先のURLと、VOICEVOXの起動状態を確認してください。");
+        throw AudioError(502, "音声APIに接続できません。接続先のURLと、VOICEVOX・COEIROINK・ブリッジの起動状態を確認してください。");
     }
     check_stop(stop);
     if (requests) requests->push_back({{"stage", stage}, {"status", response.status}});
@@ -230,11 +252,24 @@ std::string synthesize_audio(const std::string& text, const Settings& settings,
                              std::stop_token stop, Json* requests = nullptr) {
     if (text.empty() || text.size() > 100'000) throw AudioError(400, "Speech text is empty or too long.");
     (void)wide(text); // Validate UTF-8 before building either request.
+    if (settings.provider == "builtin") {
+        auto bytes = synthesize_builtin(text, static_cast<unsigned>(std::stoul(settings.speaker)), settings.speed, stop);
+        if (requests) requests->push_back({{"stage", "builtin_synthesis"}, {"local", true}, {"status", 0}});
+        return bytes;
+    }
     for (int attempt = 0; attempt != 2; ++attempt) {
         try {
             check_stop(stop);
             HttpResponse audio;
-            if (settings.provider == "legacy") audio = fetch(legacy(text, settings), stop, "synthesis", requests);
+            if (settings.provider == "coeiroink") {
+                const Json body = {{"speakerUuid", settings.speaker_uuid}, {"styleId", std::stoi(settings.speaker)},
+                    {"text", text}, {"speedScale", settings.speed}, {"volumeScale", 1.0}, {"pitchScale", 0.0},
+                    {"intonationScale", 1.0}, {"prePhonemeLength", 0.0}, {"postPhonemeLength", 0.0},
+                    {"outputSamplingRate", 44100}, {"sampledIntervalValue", 0}, {"adjustedF0", Json::array()},
+                    {"processingAlgorithm", "coeiroink"}, {"prosodyDetail", Json::array()}};
+                audio = fetch({"POST", settings.engine_url + "/v1/synthesis",
+                    {{"Content-Type", "application/json"}, {"Accept", "audio/wav"}}, body.dump()}, stop, "synthesis", requests);
+            } else if (settings.provider == "legacy") audio = fetch(legacy(text, settings), stop, "synthesis", requests);
             else {
                 const auto response = fetch({"POST", settings.engine_url + "/audio_query?text=" +
                     form_encode(text) + "&speaker=" + settings.speaker, {}, {}}, stop, "audio_query", requests);
@@ -250,8 +285,12 @@ std::string synthesize_audio(const std::string& text, const Settings& settings,
                 audio = fetch({"POST", settings.engine_url + "/synthesis?speaker=" + settings.speaker,
                     {{"Content-Type", "application/json"}}, std::move(body)}, stop, "synthesis", requests);
             }
-            if (!content_type(audio).starts_with("audio/")) throw AudioError(502, "音声APIから音声データを取得できませんでした。APIキーと利用可能なポイントを確認してください。");
             if (audio.body.empty() || audio.body.size() > max_encoded_bytes) bad_audio();
+            const auto type = content_type(audio);
+            // coeiroink-v2-bridge streams WAV without a Content-Type header.
+            // Limit this exception to the optional bridge and validate the WAV.
+            if (settings.coeiroink && type.empty()) (void)audio_detail::parse_wav(audio.body, stop);
+            else if (!type.starts_with("audio/")) throw AudioError(502, "音声APIから音声データを取得できませんでした。APIキーと利用可能なポイントを確認してください。");
             check_stop(stop);
             return std::move(audio.body);
         } catch (const ResponseFailure& error) {
@@ -670,7 +709,7 @@ Json Audio::diagnose(const Json& settings, std::stop_token stop) {
         const auto pcm = audio_detail::decode_audio(bytes, job.cancel.get_token());
         job.check();
         result["ok"] = true;
-        result["message"] = "音声APIへの接続と音声合成を確認できました。診断では音声を再生していません。";
+        result["message"] = parsed.provider == "builtin" ? "内蔵VOICEVOXの音声合成を確認できました。診断では音声を再生していません。" : "音声APIへの接続と音声合成を確認できました。診断では音声を再生していません。";
         result["audioBytes"] = bytes.size();
         result["sampleRate"] = pcm.sample_rate;
     } catch (const AudioError& error) {

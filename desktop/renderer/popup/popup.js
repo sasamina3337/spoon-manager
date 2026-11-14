@@ -35,7 +35,7 @@ const donations = createDonationsPanel($('donations-slot'), {refresh: button => 
   notice('ブラウザーでDJの追加同意を完了してから、ギフト履歴を更新してください。開発者センターへの donations.read の登録も必要です。');
 })});
 
-const types = {comment: 'コメント', entry: '入室', heart: 'ハート', spoon: 'スプーン', follow: 'フォロー', question: '質問箱', automatic: '自動コメント', automaticError: '自動コメント失敗', bot: 'ボット送信', botError: 'ボット送信失敗'};
+const types = {comment: 'コメント', entry: '入室', heart: 'ハート', spoon: 'スプーン', follow: 'フォロー', question: '質問箱', automatic: '自動コメント', automaticError: '自動コメント失敗', bot: 'ボット送信', botError: 'ボット送信失敗', credit: '音声クレジット', 'credit-error': '音声クレジット送信失敗'};
 const features = ['fans', 'follow', 'chat', 'djFollow', 'donations'];
 let state, selected = '', busy = false, prefsDirty = false, prefsSignature = '', sessionSignature = '';
 let profileSignature = '';

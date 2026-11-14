@@ -289,6 +289,8 @@ std::string event_label(const std::string& type) {
     if (type == "automaticError") return "自動コメント失敗";
     if (type == "bot") return "ボット送信";
     if (type == "botError") return "ボット送信失敗";
+    if (type == "credit") return "音声クレジット";
+    if (type == "credit-error") return "音声クレジット送信失敗";
     return type;
 }
 

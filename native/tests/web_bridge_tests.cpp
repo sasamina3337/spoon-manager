@@ -87,6 +87,9 @@ void test_payload_validation() {
     spoon::Application application(fixture.root);
     spoon::WebBridge bridge(application);
     const auto original = bridge.dispatch("snapshot");
+    for (const auto& source : std::vector<Json>{"invalid", 7, nullptr})
+        rejects([&] { bridge.dispatch("test-voice", {{"source", source}}); }, "Invalid voice test source reached playback");
+    rejects([&] { bridge.dispatch("test-voice", {{"source", "coeiroink"}}); }, "Disabled direct connection reached playback");
     for (const auto* operation : {"snapshot", "connection", "authorization-url", "start-receiving",
                                  "stop-receiving", "audio-devices", "test-voice", "diagnose-speech", "stop-audio"}) {
         for (const auto& bad : std::vector<Json>{nullptr, Json::array(), "bridge-test-secret", 7,

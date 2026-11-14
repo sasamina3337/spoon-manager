@@ -12,7 +12,12 @@ foreach(required IN ITEMS SpoonManager.exe cloudflared.exe LICENSE
         licenses/nlohmann-json.txt licenses/nlohmann-json-components.txt
         licenses/cpp-httplib.txt licenses/cloudflared.txt
         licenses/cloudflared-dependencies.txt licenses/cloudflared-dependencies.json
-        licenses/go-runtime.txt licenses/nsis.txt licenses/microsoft-runtime.txt)
+        licenses/go-runtime.txt licenses/nsis.txt licenses/microsoft-runtime.txt
+        voicevox/runtime/voicevox_core.dll voicevox/runtime/voicevox_onnxruntime.dll
+        voicevox/catalog.json voicevox/licenses/TERMS.txt voicevox/licenses/CORE-LICENSE.txt
+        voicevox/licenses/ONNX-TERMS.txt voicevox/licenses/ONNX-third-party-notices.html
+        voicevox/licenses/OpenJTalk-dictionary-COPYING.txt voicevox/licenses/VOICEVOX-MODEL-REVIEW.md
+        licenses/voicevox-core-dependencies.txt licenses/voicevox-core-dependencies.json)
     if(NOT EXISTS "${payload}/${required}")
         message(FATAL_ERROR "Missing release file: ${required}")
     endif()

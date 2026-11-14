@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 if(POLICY CMP0168)
     cmake_policy(SET CMP0168 NEW)
 endif()
-project(SpoonManager VERSION 2.8.2 LANGUAGES C CXX RC)
+project(SpoonManager VERSION 2.9.0 LANGUAGES C CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "Spoon Manager requires Windows (WinHTTP and Windows audio).")
@@ -51,17 +51,21 @@ FetchContent_Declare(httplib
 
 FetchContent_MakeAvailable(nlohmann_json httplib)
 include(cmake/WebView2.cmake)
+include(cmake/Voicevox.cmake)
 
 add_library(spoon-core STATIC
     native/src/model.cpp
     native/src/http.cpp
     native/src/spoon_client.cpp
     native/src/audio.cpp
+    native/src/builtin_speech.cpp
     native/src/storage.cpp
     native/src/application.cpp
     native/src/participation.cpp
     native/src/web_bridge.cpp)
 target_include_directories(spoon-core PUBLIC native/include)
+target_include_directories(spoon-core PRIVATE "${CMAKE_BINARY_DIR}/generated"
+    "${PROJECT_SOURCE_DIR}/.local/voicevox-cache/core/voicevox_core-windows-x64-0.17.1/include")
 target_link_libraries(spoon-core PUBLIC nlohmann_json::nlohmann_json httplib::httplib
     winhttp bcrypt winmm mfplat mfreadwrite mfuuid propsys shlwapi ole32 ws2_32 crypt32 shell32 uuid)
 target_compile_definitions(spoon-core PUBLIC UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -101,6 +105,7 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/ui.stamp"
     VERBATIM)
 add_custom_target(spoon-ui ALL DEPENDS "${CMAKE_BINARY_DIR}/ui.stamp")
 add_dependencies(spoon-manager spoon-ui)
+add_dependencies(spoon-manager spoon-voicevox)
 
 # Listener participation uses a pinned portable Cloudflare helper, started only
 # when the user publishes a temporary URL. Fixed HTTPS reverse proxies also work.
@@ -127,6 +132,12 @@ add_custom_command(TARGET spoon-manager POST_BUILD COMMAND "${CMAKE_COMMAND}" -E
     "${spoon_tunnel_helper}" "$<TARGET_FILE_DIR:spoon-manager>/cloudflared.exe")
 
 if(BUILD_TESTING)
+    add_executable(spoon-builtin-tests native/tests/builtin_tests.cpp)
+    target_link_libraries(spoon-builtin-tests PRIVATE spoon-core)
+    set_target_properties(spoon-builtin-tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<0:>")
+    add_dependencies(spoon-builtin-tests spoon-voicevox)
+    add_test(NAME native-builtin COMMAND spoon-builtin-tests)
+    set_tests_properties(native-builtin PROPERTIES TIMEOUT 180)
     add_test(NAME native-renderer-assets COMMAND "${CMAKE_COMMAND}"
         "-DPROJECT_ROOT=${PROJECT_SOURCE_DIR}" "-DTEST_ROOT=${CMAKE_BINARY_DIR}/test-data"
         -P "${PROJECT_SOURCE_DIR}/native/tests/renderer_assets_test.cmake")
@@ -201,7 +212,7 @@ add_custom_command(OUTPUT "${SPOON_INSTALLER_FILE}"
         "${PROJECT_SOURCE_DIR}/COMMANDS.md" "${PROJECT_SOURCE_DIR}/native/README.md"
         "${webview2_SOURCE_DIR}/LICENSE.txt" "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT"
         "${webview2_SOURCE_DIR}/NOTICE.txt" "${httplib_SOURCE_DIR}/LICENSE"
-        ${spoon_redistribution_notices}
+        ${spoon_redistribution_notices} ${spoon_voicevox_sources}
     COMMENT "Building per-user NSIS installer (does not install the application)"
     VERBATIM)
 add_custom_target(spoon-installer ALL DEPENDS "${SPOON_INSTALLER_FILE}")
@@ -225,13 +236,13 @@ if(BUILD_TESTING)
         -File "${PROJECT_SOURCE_DIR}/scripts/test-installer.ps1"
         -Installer "${SPOON_INSTALLER_FILE}"
         -Root "${CMAKE_BINARY_DIR}/test-data/installer")
-    set_tests_properties(native-installer PROPERTIES TIMEOUT 150 RUN_SERIAL TRUE)
+    set_tests_properties(native-installer PROPERTIES TIMEOUT 270 RUN_SERIAL TRUE)
     # Exercise public Release artifacts even when the IDE currently selects Debug.
     add_test(NAME native-release-package COMMAND powershell -NoProfile -ExecutionPolicy Bypass
         -File "${PROJECT_SOURCE_DIR}/scripts/test-release.ps1"
         -ProjectRoot "${PROJECT_SOURCE_DIR}"
         -Root "${CMAKE_BINARY_DIR}/test-data/release-package")
-    set_tests_properties(native-release-package PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
+    set_tests_properties(native-release-package PROPERTIES TIMEOUT 360 RUN_SERIAL TRUE SKIP_RETURN_CODE 77)
 endif()
 
 set(CPACK_GENERATOR ZIP)

@@ -36,6 +36,17 @@ void test_receiving_and_tools() {
     server.Post("/v1/live/chat", [&](const auto&, auto& response) {++sent; response.status=204;});
     server.Post("/v1/live/follow", [&](const auto&, auto& response) {++follows; response.status=204;});
     server.Get("/speakers", [](auto&, auto& response) {response.set_content(R"([{"name":"Voice","styles":[{"name":"Normal","id":2}]}])", "application/json");});
+    std::atomic<int> bridge_catalog_requests{0};
+    server.Get("/bridge/speakers", [&](auto&, auto& response) {
+        ++bridge_catalog_requests;
+        response.set_content(R"([{"name":"リリンちゃん","speaker_uuid":"cb11bdbd-78fc-4f16-b528-a400bae1782d","styles":[{"name":"のーまる","id":2},{"name":"ささやき","id":91}]}])", "application/json");
+    });
+    server.Get("/direct/v1/speakers_path_variant", [](auto&, auto& response) {
+        response.set_content(R"([{"speakerName":"リリンちゃん","speakerUuid":"cb11bdbd-78fc-4f16-b528-a400bae1782d","styles":[{"styleName":"のーまる","styleId":2},{"styleName":"ささやき","styleId":91}]}])", "application/json");
+    });
+    server.Get("/legacy-direct/v1/speakers", [](auto&, auto& response) {
+        response.set_content(R"([{"speakerName":"リリンちゃん","speakerUuid":"cb11bdbd-78fc-4f16-b528-a400bae1782d","styles":[{"styleName":"のーまる","styleId":2}]}])", "application/json");
+    });
     server.Get("/v1/live/events", [&](auto&, auto& response) {
         response.set_chunked_content_provider("text/event-stream", [&](std::size_t offset, httplib::DataSink& sink) {
             if (!offset) {
@@ -77,10 +88,49 @@ void test_receiving_and_tools() {
         require(app.snapshot()["manager"]["sessions"][0]["donationHistory"]["total"]==25,"Permission failure replaced saved donation history");
         deny_donations = false;
         require(app.voice_catalog()[0]["name"]=="Voice（Normal）","VOICEVOX catalog was not flattened");
+        require(bridge_catalog_requests == 0, "Disabled COEIROINK requested its catalog");
+        settings["coeiroinkEnabled"] = true; settings["coeiroinkUrl"] = origin + "/bridge/";
+        app.save_settings(settings, {{"features", {{"chat", true}}}});
+        const auto combined = app.voice_catalog();
+        require(combined.size() == 3 && combined[0]["id"] == 2 && combined[1]["id"] == "coeiroink:cb11bdbd-78fc-4f16-b528-a400bae1782d:2", "Catalogs collided or were not combined");
+        require(combined[1]["name"] == "COEIROINK:リリンちゃん（のーまる）", "Bridge voice name was not preserved");
+        settings["coeiroinkDirectEnabled"] = true;
+        bool conflict = false;
+        try { app.save_settings(settings, {{"features", {{"chat", true}}}}); }
+        catch (const std::runtime_error&) { conflict = true; }
+        require(conflict && !app.snapshot()["settings"]["coeiroinkDirectEnabled"].get<bool>(), "Conflicting COEIROINK modes were saved");
+        settings["coeiroinkEnabled"] = false;
+        settings["coeiroinkDirectUrl"] = origin + "/direct";
+        app.save_settings(settings, {{"features", {{"chat", true}}}});
+        require(app.voice_catalog() == combined, "Direct and bridge voice IDs or names differed");
+        settings["engineUrl"] = origin + "/offline";
+        app.save_settings(settings, {{"features", {{"chat", true}}}});
+        require(app.voice_catalog().size() == 2, "Direct API required a working VOICEVOX connection");
+        settings["coeiroinkDirectUrl"] = origin + "/legacy-direct";
+        app.save_settings(settings, {{"features", {{"chat", true}}}});
+        require(app.voice_catalog().size() == 1, "Direct speaker endpoint fallback failed");
+        settings["coeiroinkDirectEnabled"] = false; settings["engineUrl"] = origin;
+        app.save_settings(settings, {{"features", {{"chat", true}}}});
+        require(app.voice_catalog().size() == 1 && bridge_catalog_requests == 1, "Disabled optional catalog was retained or requested");
         app.manager_action("refresh","api:dj:1",{});
         require(app.snapshot()["_native"]["listeners"].size()==1,"Current listeners were not refreshed");
         app.manager_action("follow","api:dj:1",{}); require(follows==1,"Follow was not dispatched once");
         app.send_generated("api:dj:1","Hello","bot",""); require(sent==1,"Bot reply was not sent");
+        app.send_generated("api:dj:1","クレジット：\nVOICEVOX:ずんだもん","credit","");
+        require(sent==1,"Disabled reading sent credits");
+        settings["enabled"]=true; settings["autoVoiceCredits"]=false;
+        app.save_settings(settings,{{"features",{{"chat",true}}}});
+        app.send_generated("api:dj:1","クレジット：\nVOICEVOX:ずんだもん","credit","");
+        require(sent==1,"Disabled credit setting was ignored");
+        settings["autoVoiceCredits"]=true;
+        app.save_settings(settings,{{"features",{{"chat",true}}}});
+        app.save_runtime({{"sessions",{{"api:dj:1",{{"automationPaused",true}}}}}});
+        app.send_generated("api:dj:1","クレジット：\nVOICEVOX:ずんだもん","credit","");
+        require(sent==2,"Credit comments were suppressed by greeting automation pause");
+        bool long_credit_rejected=false;
+        try {app.send_generated("api:dj:1",std::string(101,'x'),"credit","");}
+        catch(const std::invalid_argument&) {long_credit_rejected=true;}
+        require(long_credit_rejected && sent==2,"Credit comments exceeded 100 characters");
         app.save_runtime({{"assignments",{{"api:dj:user",8}}}});
         app.stop_receiving(); release=true;
         require(app.snapshot()["_native"]["receiving"]==false,"Stop did not reset receiving state");
